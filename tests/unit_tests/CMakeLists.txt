@@ -31,6 +31,7 @@ set(unit_tests_sources
   apply_permutation.cpp
   address_from_url.cpp
   async.cpp
+  base32.cpp
   base58.cpp
   blockchain_db.cpp
   block_queue.cpp
@@ -98,6 +99,7 @@ set(unit_tests_sources
   sha256.cpp
   slow_memmem.cpp
   sp_wallet_tx_history.cpp
+  sp_wallet_legacy_proofs.cpp
   subaddress.cpp
   tasking_system_demo.cpp
   test_tx_utils.cpp
