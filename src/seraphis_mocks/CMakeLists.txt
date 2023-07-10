@@ -39,6 +39,7 @@ set(seraphis_mocks_sources
   mock_tx_builders_legacy_inputs.cpp
   mock_tx_builders_outputs.cpp
   scan_chunk_consumer_mocks.cpp
+  scan_context_async_mock.cpp
   tx_input_selector_mocks.cpp)
 
 monero_find_all_headers(seraphis_mocks_headers, "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -49,11 +50,13 @@ monero_add_library(seraphis_mocks
 
 target_link_libraries(seraphis_mocks
   PUBLIC
+    async
     cncrypto
     common
     cryptonote_basic
     device
     epee
+    net
     ringct
     seraphis_core
     seraphis_crypto

@@ -364,28 +364,7 @@ static ScanMachineState handle_empty_chunk(const ScanMachineMetadata &metadata,
     if (scan_context_inout.is_aborted())
         return ScanMachineTerminated{ .result = ScanMachineResult::ABORTED };
 
-    // 3. verify that our termination chunk is contiguous with the chunks received so far
-    // - this can fail if a reorg dropped below our contiguity marker without replacing the dropped blocks, causing the
-    //   first chunk obtained after the reorg to be this empty termination chunk
-    // note: this test won't fail if the chain's top index is below our contiguity marker when our contiguity marker has
-    //       an unspecified block id; we don't care if the top index is lower than our scanning 'backstop' (i.e.
-    //       lowest point in our chunk consumer) when we haven't actually scanned any blocks
-    const ContiguityCheckResult contiguity_check_result{
-            new_chunk_contiguity_check(contiguity_marker, chunk_context, first_contiguity_index)
-        };
-
-    if (contiguity_check_result != ContiguityCheckResult::SUCCESS)
-        return machine_state_from_contiguity_result(contiguity_check_result, metadata);
-
-    // 4. final update for our chunk consumer
-    // - we need to update with the termination chunk in case a reorg popped blocks, so the chunk consumer can roll back
-    //   its state
-    chunk_consumer_inout.consume_onchain_chunk(ledger_chunk,
-        contiguity_marker.block_id ? *(contiguity_marker.block_id) : rct::zero(),
-        contiguity_marker.block_index + 1,
-        {});
-
-    // 5. no more scanning required
+    // 3. no more scanning required
     return ScanMachineTerminated{ .result = ScanMachineResult::SUCCESS };
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -403,9 +382,9 @@ static ScanMachineState do_scan_pass(const ScanMachineMetadata &metadata,
         new_chunk = scan_context_inout.get_onchain_chunk();
         CHECK_AND_ASSERT_THROW_MES(new_chunk, "seraphis scan state machine (do scan pass): chunk obtained is null.");
     }
-    catch (...)
+    catch (const std::exception &e)
     {
-        LOG_ERROR("seraphis scan state machine (do scan pass): get chunk failed.");
+        LOG_ERROR("seraphis scan state machine (do scan pass): get chunk failed with: " << e.what());
         throw;
     }
 

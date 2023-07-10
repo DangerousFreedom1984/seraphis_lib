@@ -116,7 +116,27 @@ public:
         m_queue.pop_front();
         return TokenQueueResult::SUCCESS;
     }
+    /// try to remove the minimum element
+    TokenQueueResult try_remove_min(TokenT &token_out)
+    {
+        // try to lock the queue, then check if there are any elements
+        std::unique_lock<std::mutex> lock{m_mutex, std::try_to_lock};
+        if (!lock.owns_lock())
+            return TokenQueueResult::TRY_LOCK_FAIL;
+        if (m_queue.size() == 0)
+            return TokenQueueResult::QUEUE_EMPTY;
 
+        // find the min element
+        auto min_elem = m_queue.begin();
+        for (auto it = m_queue.begin(); it != m_queue.end(); ++it)
+        {
+            if (*it < *min_elem)
+                min_elem = it;
+        }
+        token_out = std::move(*min_elem);
+        m_queue.erase(min_elem);
+        return TokenQueueResult::SUCCESS;
+    }
     /// shut down the queue
     void shut_down()
     {

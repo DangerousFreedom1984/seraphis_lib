@@ -41,6 +41,7 @@
 #include "seraphis_main/enote_finding_context.h"
 #include "seraphis_main/scan_core_types.h"
 #include "seraphis_main/scan_ledger_chunk.h"
+#include "net/http.h"
 
 //third party headers
 
@@ -100,6 +101,65 @@ private:
     const std::unordered_map<rct::key, cryptonote::subaddress_index> &m_legacy_subaddress_map;
     const crypto::secret_key &m_legacy_view_privkey;
     const LegacyScanMode m_legacy_scan_mode;
+};
+
+////
+// EnoteFindingContextMockLegacy
+// - wraps a pool of network clients used to fetch blocks from the daemon
+// - find owned enotes from legacy view scanning using actual chain data
+///
+class EnoteFindingContextMockLegacy final
+{
+public:
+//constructors
+    EnoteFindingContextMockLegacy(
+        const rct::key &legacy_base_spend_pubkey,
+        const std::unordered_map<rct::key, cryptonote::subaddress_index> &legacy_subaddress_map,
+        const crypto::secret_key &legacy_view_privkey,
+        const std::string &daemon_address,
+        const epee::net_utils::ssl_options_t ssl_support):
+            m_legacy_base_spend_pubkey{legacy_base_spend_pubkey},
+            m_legacy_subaddress_map{legacy_subaddress_map},
+            m_legacy_view_privkey{legacy_view_privkey},
+            m_daemon_address{daemon_address},
+            m_ssl_support(ssl_support)
+    {
+    }
+
+//overloaded operators
+    /// disable copy/move (this is a scoped manager [reference wrapper])
+    EnoteFindingContextMockLegacy& operator=(EnoteFindingContextMockLegacy&&) = delete;
+
+//member functions
+    /// scans enotes in a tx for basic records
+    void find_basic_records(
+        const std::uint64_t block_index,
+        const std::uint64_t block_timestamp,
+        const rct::key &transaction_id,
+        const std::uint64_t total_enotes_before_tx,
+        const std::uint64_t unlock_time,
+        const TxExtra &tx_memo,
+        const std::vector<sp::LegacyEnoteVariant> &enotes,
+        std::list<sp::ContextualBasicRecordVariant> &collected_records) const;
+
+    size_t http_client_index();
+    void release_http_client(size_t index);
+
+    epee::net_utils::ssl_options_t ssl_support() { return m_ssl_support; }
+
+    const std::string m_daemon_address;
+
+    mutable std::mutex m_http_client_mutex;
+    mutable std::unordered_map<size_t, bool> m_http_client_in_use;
+    mutable std::vector<std::unique_ptr<epee::net_utils::http::abstract_http_client>> m_http_clients;
+//member variables
+private:
+    const rct::key &m_legacy_base_spend_pubkey;
+    const std::unordered_map<rct::key, cryptonote::subaddress_index> &m_legacy_subaddress_map;
+    const crypto::secret_key &m_legacy_view_privkey;
+
+    // network
+    const epee::net_utils::ssl_options_t m_ssl_support;
 };
 
 ////

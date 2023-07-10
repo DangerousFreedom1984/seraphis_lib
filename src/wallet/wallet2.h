@@ -138,6 +138,7 @@ private:
     // Full wallet callbacks
     virtual void on_new_block(uint64_t height, const cryptonote::block& block) {}
     virtual void on_reorg(uint64_t height, uint64_t blocks_detached, size_t transfers_detached) {}
+    virtual void on_scanner_complete(std::chrono::milliseconds duration) {}
     virtual void on_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& tx, uint64_t amount, uint64_t burnt, const cryptonote::subaddress_index& subaddr_index, bool is_change, uint64_t unlock_time) {}
     virtual void on_unconfirmed_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& tx, uint64_t amount, const cryptonote::subaddress_index& subaddr_index) {}
     virtual void on_money_spent(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& in_tx, uint64_t amount, const cryptonote::transaction& spend_tx, const cryptonote::subaddress_index& subaddr_index) {}
@@ -1786,6 +1787,8 @@ private:
     const std::vector<std::vector<tools::wallet2::multisig_info>> *m_multisig_rescan_info;
     const std::vector<std::vector<rct::key>> *m_multisig_rescan_k;
     serializable_unordered_map<crypto::public_key, crypto::key_image> m_cold_key_images;
+
+    std::chrono::milliseconds m_duration_getting_blocks;
 
     std::atomic<bool> m_run;
 

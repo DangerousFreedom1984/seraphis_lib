@@ -137,6 +137,17 @@ monero_add_executable(blockchain_import
   ${blockchain_import_sources}
   ${blockchain_import_private_headers})
 
+
+set(blockchain_scanner_sources
+  blockchain_scanner.cpp
+  )
+
+set(blockchain_scanner_private_headers)
+
+monero_private_headers(blockchain_scanner
+	  ${blockchain_scanner_private_headers})
+
+
 target_link_libraries(blockchain_import
   PRIVATE
     cryptonote_core
@@ -331,3 +342,32 @@ target_link_libraries(blockchain_prune
     ${Boost_THREAD_LIBRARY}
     ${CMAKE_THREAD_LIBS_INIT}
     ${EXTRA_LIBRARIES})
+
+monero_add_executable(blockchain_scanner
+  ${blockchain_scanner_sources}
+  ${blockchain_scanner_private_headers})
+
+target_link_libraries(blockchain_scanner
+  PRIVATE
+    mnemonics
+    wallet
+    cryptonote_basic
+    cryptonote_core
+    version
+    epee
+    async
+    seraphis_mocks
+    seraphis_impl
+    seraphis_main
+    seraphis_core
+    seraphis_wallet
+    ${Boost_FILESYSTEM_LIBRARY}
+    ${Boost_SYSTEM_LIBRARY}
+    ${Boost_THREAD_LIBRARY}
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${EXTRA_LIBRARIES})
+
+set_property(TARGET blockchain_scanner
+	PROPERTY
+	OUTPUT_NAME "monero-blockchain-scanner")
+install(TARGETS blockchain_scanner DESTINATION bin)
