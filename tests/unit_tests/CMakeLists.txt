@@ -99,6 +99,7 @@ set(unit_tests_sources
   sha256.cpp
   slow_memmem.cpp
   sp_wallet_tx_history.cpp
+  sp_wallet_show_enotes.cpp
   sp_wallet_legacy_proofs.cpp
   subaddress.cpp
   tasking_system_demo.cpp
@@ -116,6 +117,7 @@ set(unit_tests_sources
   output_selection.cpp
   vercmp.cpp
   ringdb.cpp
+  wallet2_storage.cpp
   wipeable_string.cpp
   is_hdd.cpp
   aligned.cpp
@@ -150,6 +152,7 @@ target_link_libraries(unit_tests
     seraphis_mocks
     seraphis_wallet
     wallet
+    wallet2_basic
     p2p
     version
     ${Boost_CHRONO_LIBRARY}
