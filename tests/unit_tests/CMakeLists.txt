@@ -96,6 +96,7 @@ set(unit_tests_sources
   seraphis_multisig.cpp
   seraphis_serialization.cpp
   seraphis_tx.cpp
+  seraphis_generic_tx_class.cpp
   sha256.cpp
   slow_memmem.cpp
   subaddress.cpp
@@ -146,6 +147,7 @@ target_link_libraries(unit_tests
     seraphis_impl
     seraphis_main
     seraphis_mocks
+    seraphis_wallet
     wallet
     p2p
     version
