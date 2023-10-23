@@ -736,6 +736,7 @@ void recover_sp_destination_v1(const ser_JamtisDestinationV1 &serializable_desti
         serializable_destination.addr_tag.bytes,
         sizeof(serializable_destination.addr_tag));
 }
+//-------------------------------------------------------------------------------------------------------------------
 
 } //namespace serialization
 } //namespace sp
