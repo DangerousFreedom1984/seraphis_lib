@@ -349,20 +349,20 @@ void construct_tx_for_mock_ledger_v1(const legacy_mock_keys &local_user_legacy_k
     std::vector<jamtis::JamtisPaymentProposalV1> normal_payments;
 
     construct_tx_for_mock_ledger_v1(local_user_legacy_keys,
-    local_user_sp_keys,
-    local_user_input_selector,
-    tx_fee_calculator,
-    fee_per_tx_weight,
-    max_inputs,
-    outlays,
-    legacy_ring_size,
-    ref_set_decomp_n,
-    ref_set_decomp_m,
-    bin_config,
-    ledger_context,
-    tx_out,
-    selfsend_payments,
-    normal_payments);
+        local_user_sp_keys,
+        local_user_input_selector,
+        tx_fee_calculator,
+        fee_per_tx_weight,
+        max_inputs,
+        outlays,
+        legacy_ring_size,
+        ref_set_decomp_n,
+        ref_set_decomp_m,
+        bin_config,
+        ledger_context,
+        tx_out,
+        selfsend_payments,
+        normal_payments);
 }
 //-------------------------------------------------------------------------------------------------------------------
 void transfer_funds_single_mock_v1_unconfirmed_sp_only(const jamtis::mocks::jamtis_mock_keys &local_user_sp_keys,
