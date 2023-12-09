@@ -1,4 +1,8 @@
 #include <boost/filesystem.hpp>
+<<<<<<< HEAD
+=======
+#include <boost/filesystem/operations.hpp>
+>>>>>>> 5378c4551 ([seraphis_wallet]: encrypted file)
 #include <gtest/gtest.h>
 
 #include "crypto/chacha.h"
@@ -21,7 +25,11 @@ struct test_s
 
 TEST(EncryptedFile, ReadWriteBlob)
 {
+<<<<<<< HEAD
     boost::filesystem::path temp_file = boost::filesystem::unique_path();
+=======
+    boost::filesystem::path temp_file = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path();
+>>>>>>> 5378c4551 ([seraphis_wallet]: encrypted file)
     const std::string tmp_path = temp_file.native();
 
     test_s test{.data = "monero is awesome"};
@@ -38,7 +46,11 @@ TEST(EncryptedFile, ReadWriteBlob)
 
 TEST(EncryptedFile, ReadWriteJson)
 {
+<<<<<<< HEAD
     boost::filesystem::path temp_file = boost::filesystem::unique_path();
+=======
+    boost::filesystem::path temp_file = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path();
+>>>>>>> 5378c4551 ([seraphis_wallet]: encrypted file)
     const std::string tmp_path = temp_file.native();
 
     test_s test{.data = "monero is awesome!"};

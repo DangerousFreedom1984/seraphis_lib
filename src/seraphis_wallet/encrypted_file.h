@@ -13,7 +13,11 @@
 
 #include <type_traits>
 
+<<<<<<< HEAD
 struct encrypted_file
+=======
+struct EncryptedFile
+>>>>>>> 5378c4551 ([seraphis_wallet]: encrypted file)
 {
     std::string encrypted_data;
     crypto::chacha_iv iv;
@@ -31,7 +35,11 @@ template <class T> bool read_encrypted_file(std::string path, const crypto::chac
     if (!epee::file_io_utils::load_file_to_string(path, buf))
         return false;
 
+<<<<<<< HEAD
     encrypted_file file;
+=======
+    EncryptedFile file;
+>>>>>>> 5378c4551 ([seraphis_wallet]: encrypted file)
 
     binary_archive<false> file_ar{epee::strspan<std::uint8_t>(buf)};
     if (!::serialization::serialize(file_ar, file))
@@ -42,6 +50,10 @@ template <class T> bool read_encrypted_file(std::string path, const crypto::chac
     crypto::chacha20(file.encrypted_data.data(), file.encrypted_data.size(), key, file.iv, &decrypted_data[0]);
 
     binary_archive<false> ar{epee::strspan<std::uint8_t>(decrypted_data)};
+<<<<<<< HEAD
+=======
+
+>>>>>>> 5378c4551 ([seraphis_wallet]: encrypted file)
     if (!::serialization::serialize(ar, struct_out))
         return false;
 
@@ -55,7 +67,11 @@ template <class T> bool read_encrypted_file_json(std::string path, const crypto:
     if (!epee::file_io_utils::load_file_to_string(path, buf))
         return false;
 
+<<<<<<< HEAD
     encrypted_file file;
+=======
+    EncryptedFile file;
+>>>>>>> 5378c4551 ([seraphis_wallet]: encrypted file)
 
     binary_archive<false> file_ar{epee::strspan<std::uint8_t>(buf)};
     if (!::serialization::serialize(file_ar, file))
@@ -65,8 +81,12 @@ template <class T> bool read_encrypted_file_json(std::string path, const crypto:
     decrypted_data.resize(file.encrypted_data.size());
     crypto::chacha20(file.encrypted_data.data(), file.encrypted_data.size(), key, file.iv, &decrypted_data[0]);
 
+<<<<<<< HEAD
     std::string decoded = epee::string_encoding::base64_decode(decrypted_data);
     return epee::serialization::load_t_from_json(struct_out, decoded);
+=======
+    return epee::serialization::load_t_from_json(struct_out, decrypted_data);
+>>>>>>> 5378c4551 ([seraphis_wallet]: encrypted file)
 }
 
 template <class T> bool write_encrypted_file(std::string path, const crypto::chacha_key &key, T &struct_in)
@@ -78,13 +98,21 @@ template <class T> bool write_encrypted_file(std::string path, const crypto::cha
 
     std::string buf = data_oss.str();
 
+<<<<<<< HEAD
     encrypted_file file = {};
+=======
+    EncryptedFile file = {};
+>>>>>>> 5378c4551 ([seraphis_wallet]: encrypted file)
     file.iv = crypto::rand<crypto::chacha_iv>();
 
     std::string encrypted_data;
     encrypted_data.resize(buf.size());
 
+<<<<<<< HEAD
     crypto::chacha20(buf.data(), buf.size(), key, file.iv, &encrypted_data[0]);
+=======
+    crypto::chacha20(std::move(buf.data()), buf.size(), key, file.iv, &encrypted_data[0]);
+>>>>>>> 5378c4551 ([seraphis_wallet]: encrypted file)
 
     file.encrypted_data = encrypted_data;
 
@@ -99,6 +127,7 @@ template <class T> bool write_encrypted_file(std::string path, const crypto::cha
 template <class T> bool write_encrypted_file_json(std::string path, const crypto::chacha_key &key, T &struct_in)
 {
     std::string struct_json = epee::serialization::store_t_to_json(struct_in);
+<<<<<<< HEAD
     std::string data = epee::string_encoding::base64_encode(struct_json);
 
     encrypted_file file = {};
@@ -108,6 +137,16 @@ template <class T> bool write_encrypted_file_json(std::string path, const crypto
     encrypted_data.resize(data.size());
 
     crypto::chacha20(data.data(), data.size(), key, file.iv, &encrypted_data[0]);
+=======
+
+    EncryptedFile file = {};
+    file.iv = crypto::rand<crypto::chacha_iv>();
+
+    std::string encrypted_data;
+    encrypted_data.resize(struct_json.size());
+
+    crypto::chacha20(std::move(struct_json.data()), struct_json.size(), key, file.iv, &encrypted_data[0]);
+>>>>>>> 5378c4551 ([seraphis_wallet]: encrypted file)
 
     file.encrypted_data = encrypted_data;
 
