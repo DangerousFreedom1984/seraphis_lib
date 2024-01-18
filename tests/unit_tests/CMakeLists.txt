@@ -63,6 +63,7 @@ set(unit_tests_sources
   hmac_keccak.cpp
   http.cpp
   keccak.cpp
+  key_container.cpp
   levin.cpp
   logging.cpp
   long_term_block_weight.cpp
@@ -149,6 +150,7 @@ target_link_libraries(unit_tests
     seraphis_impl
     seraphis_main
     seraphis_mocks
+    seraphis_wallet
     wallet
     wallet2_basic
     p2p

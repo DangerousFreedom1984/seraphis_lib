@@ -28,20 +28,34 @@
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-set(wallet_sources
+set(seraphis_wallet_sources
+    address_utils.cpp
+    jamtis_keys.cpp
     key_container.cpp
-    jamtis_keys.cpp)
+    wallet3.cpp)
+
+set(wallet3_sources
+    wallet3.cpp)
 
 monero_find_all_headers(wallet_private_headers "${CMAKE_CURRENT_SOURCE_DIR}")
 
 monero_private_headers(seraphis_wallet
   ${wallet_private_headers})
-monero_add_library(seraphis_wallet
-  ${wallet_sources}
+
+monero_private_headers(wallet3
   ${wallet_private_headers})
+
+monero_add_library(seraphis_wallet
+  ${seraphis_wallet_sources}
+  ${seraphis_wallet_private_headers})
+
+monero_add_executable(wallet3
+  ${seraphis_wallet_sources}
+  ${seraphis_wallet_headers}
+  ${seraphis_wallet_private_headers})
+
 target_link_libraries(seraphis_wallet
   PUBLIC
-    # seraphis_lib
     cncrypto
     common
     cryptonote_basic
@@ -50,11 +64,10 @@ target_link_libraries(seraphis_wallet
     ringct
     seraphis_core
     seraphis_crypto
+    seraphis_impl
+    seraphis_mocks
     rpc_base
     multisig
-    # cryptonote_core
-    # mnemonics
-    # device_trezor
     net
     ${LMDB_LIBRARY}
     ${Boost_CHRONO_LIBRARY}
@@ -65,3 +78,44 @@ target_link_libraries(seraphis_wallet
     ${Boost_REGEX_LIBRARY}
   PRIVATE
     ${EXTRA_LIBRARIES})
+
+target_link_libraries(wallet3
+  PUBLIC
+    cncrypto
+    common
+    cryptonote_basic
+    device
+    epee
+    ringct
+    seraphis_core
+    seraphis_crypto
+    seraphis_impl
+    seraphis_mocks
+    rpc_base
+    multisig
+    net
+    ${LMDB_LIBRARY}
+    ${Boost_CHRONO_LIBRARY}
+    ${Boost_SERIALIZATION_LIBRARY}
+    ${Boost_FILESYSTEM_LIBRARY}
+    ${Boost_SYSTEM_LIBRARY}
+    ${Boost_THREAD_LIBRARY}
+    ${Boost_REGEX_LIBRARY}
+  PRIVATE
+    ${EXTRA_LIBRARIES}
+    ${EPEE_READLINE}
+    qrcodegen
+    version
+    ${Boost_CHRONO_LIBRARY}
+    ${Boost_PROGRAM_OPTIONS_LIBRARY}
+    ${Boost_FILESYSTEM_LIBRARY}
+    ${Boost_LOCALE_LIBRARY}
+    ${ICU_LIBRARIES}
+    ${Boost_THREAD_LIBRARY}
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${GNU_READLINE_LIBRARY}
+    ${EXTRA_LIBRARIES})
+set_property(TARGET wallet3
+  PROPERTY
+    OUTPUT_NAME "monero-wallet3")
+install(TARGETS wallet3 DESTINATION bin)
