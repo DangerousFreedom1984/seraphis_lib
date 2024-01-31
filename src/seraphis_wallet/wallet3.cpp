@@ -44,7 +44,8 @@
 
 // seraphis lib
 #include "seraphis_impl/enote_store.h"
-#include "wallet/wallet_errors.h"
+
+#include "wallet/wallet2_basic/wallet2_storage.h"
 
 extern "C"
 {
@@ -105,7 +106,8 @@ wallet3::wallet3() :
     m_in_command(false),
     m_inactivity_lock_timeout(DEFAULT_INACTIVITY_LOCK_TIMEOUT),
     m_enote_store({0, 0, 0}),
-    m_kdf_rounds(1)
+    m_kdf_rounds(1),
+    m_load_legacy_wallet(false)
 {
     // 1. set commands
     m_cmd_binder.set_handler("help",
@@ -165,12 +167,8 @@ bool wallet3::create_or_open_wallet()
     LOG_PRINT_L3("Basic wallet creation");
 
     // 1. define function variables
-    std::string wallet_path;
-    std::string confirm_creation;
-    std::string confirm_password;
-    bool keys_file_exists   = false;
-    bool wallet_file_exists = false;
-    bool wallet_name_valid  = false;
+    std::string wallet_path, confirm_creation, confirm_password;   // default empty
+    bool keys_file_exists, wallet_file_exists, wallet_name_valid;  // default false
 
     // 2. loop to load or create new wallet
     do
@@ -186,31 +184,45 @@ bool wallet3::create_or_open_wallet()
             LOG_ERROR("Unexpected std::cin.eof() - Exited seraphis_create_basic::");
             return false;
         }
-        wallet_exists(wallet_path, keys_file_exists, wallet_file_exists);
-        m_wallet_file = wallet_path;
-        m_keys_file   = wallet_path + ".spkeys";
+        // check if wallet exists and fill variables m_wallet_file,m_wallet_keys,m_wallet_version
+        CHECK_AND_ASSERT_THROW_MES(check_wallet_filenames(wallet_path, keys_file_exists, wallet_file_exists),
+            "create_or_open_wallet: failed checking filenames.");
 
         // 3. if wallet keys exist
         if (keys_file_exists)
         {
-            // 3.1 Wallet 3 found
             tools::success_msg_writer() << tr("Wallet found");
             auto pw = password_prompter(tr("Enter your wallet password"), false);
-            try
+            if (m_wallet_version == WalletVersion::Seraphis)
             {
-                // 3.2 try to load wallet from password
-                if (load_wallet(pw.get()))
+                // 3.1 Seraphis wallet keys found
+                try
                 {
-                    wallet_name_valid = true;
+                    // 3.1.1 try to load wallet from password
+                    if (load_wallet(pw.get()))
+                    {
+                        wallet_name_valid = true;
+                    }
+                    else
+                    {
+                        // 3.1.2 wrong password entered
+                        tools::fail_msg_writer() << tr("Wrong password.");
+                    }
                 }
-                else
+                catch (...)
                 {
-                    // 3.3 wrong password entered
-                    tools::fail_msg_writer() << tr("Wrong password.");
                 }
             }
-            catch (...)
+            else if (m_wallet_version == WalletVersion::Legacy)
             {
+                // 3.2 Legacy wallet keys found
+                // 3.2.1 Load legacy wallet
+                wallet2_basic::load_keys_and_cache_from_file(
+                    m_wallet_file, pw.get().password(), m_legacy_cache, m_legacy_keys);
+            }
+            else
+            {
+                // Should never get here. Version Unknow.
             }
         }
         // 4. if wallet keys dont exist, try to create a new one
@@ -218,7 +230,7 @@ bool wallet3::create_or_open_wallet()
         {
             bool ok = true;
             message_writer() << tr("No wallet found with that name. Confirm "
-                                   "creation of new wallet named: ")
+                                   "creation of new seraphis wallet named: ")
                              << wallet_path;
             confirm_creation = input_line("", true);
             if (std::cin.eof())
@@ -232,7 +244,7 @@ bool wallet3::create_or_open_wallet()
             if (ok)
             {
                 // if 'yes' - create new wallet
-                tools::success_msg_writer() << tr("Generating new wallet...");
+                tools::success_msg_writer() << tr("Generating new seraphis wallet...");
                 auto pw = password_prompter(tr("Enter a new password for the wallet"), false);
 
                 create_new_wallet(pw.get());
@@ -334,28 +346,67 @@ bool wallet3::close_wallet()
     return true;
 }
 //----------------------------------------------------------------------------------------------------
-void wallet3::prepare_file_names(const std::string &file_path, std::string &keys_file, std::string &wallet_file)
-{
-    keys_file   = file_path;
-    wallet_file = file_path;
-    if (string_tools::get_extension(keys_file) == "spkeys")
-    {  // provided keys file name
-        wallet_file = string_tools::cut_off_extension(wallet_file);
-    }
-    else
-    {  // provided wallet file name
-        keys_file += ".spkeys";
-    }
-}
+void wallet3::prepare_file_names(const std::string &file_path, std::string &keys_file, std::string &wallet_file) {}
 //----------------------------------------------------------------------------------------------------
-void wallet3::wallet_exists(const std::string &file_path, bool &keys_file_exists, bool &wallet_file_exists)
+bool wallet3::check_wallet_filenames(const std::string &file_path, bool &keys_file_exists, bool &wallet_file_exists)
 {
     std::string keys_file, wallet_file;
-    prepare_file_names(file_path, keys_file, wallet_file);
+    bool legacy_keys;
+    WalletVersion version{WalletVersion::Legacy};
 
     boost::system::error_code ignore;
-    keys_file_exists   = boost::filesystem::exists(keys_file, ignore);
-    wallet_file_exists = boost::filesystem::exists(wallet_file, ignore);
+
+    // provided name with extension
+    if (string_tools::get_extension(file_path) == "spkeys")
+    {
+        wallet_file = string_tools::cut_off_extension(file_path);
+        keys_file   = file_path;
+        version     = WalletVersion::Seraphis;
+    }
+    else if (string_tools::get_extension(file_path) == "keys")
+    {
+        wallet_file = string_tools::cut_off_extension(file_path);
+        keys_file   = file_path;
+        version     = WalletVersion::Legacy;
+    }
+    else if (string_tools::get_extension(file_path) == "spcache")
+    {
+        wallet_file = string_tools::cut_off_extension(file_path);
+        keys_file   = wallet_file + ".spkeys";
+        version     = WalletVersion::Seraphis;
+    }
+    // provided wallet name without extension
+    else
+    {
+        wallet_file = file_path;
+
+        // if legacy wallet exists and we want to load it, then set keys_file to legacy extension
+        legacy_keys = boost::filesystem::exists(file_path + ".keys", ignore);
+        if (legacy_keys & m_load_legacy_wallet)
+        {
+            keys_file = wallet_file + ".keys";
+            version   = WalletVersion::Legacy;
+        }
+        // otherwise load or create a seraphis wallet
+        else
+        {
+            keys_file = wallet_file + ".spkeys";
+            version   = WalletVersion::Seraphis;
+        }
+    }
+
+    m_wallet_version = version;
+    m_keys_file      = keys_file;
+    m_wallet_file    = wallet_file;
+
+    keys_file_exists = boost::filesystem::exists(keys_file, ignore);
+
+    if (m_wallet_version == WalletVersion::Legacy)
+        wallet_file_exists = boost::filesystem::exists(wallet_file, ignore);
+    else
+        wallet_file_exists = boost::filesystem::exists(wallet_file + ".spcache", ignore);
+
+    return true;
 }
 //----------------------------------------------------------------------------------------------------
 void wallet3::print_wallet_type(const crypto::chacha_key &chacha_key)

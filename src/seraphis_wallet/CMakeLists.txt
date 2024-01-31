@@ -69,6 +69,7 @@ target_link_libraries(seraphis_wallet
     rpc_base
     multisig
     net
+    wallet2_basic
     ${LMDB_LIBRARY}
     ${Boost_CHRONO_LIBRARY}
     ${Boost_SERIALIZATION_LIBRARY}
@@ -94,6 +95,7 @@ target_link_libraries(wallet3
     rpc_base
     multisig
     net
+    wallet2_basic
     ${LMDB_LIBRARY}
     ${Boost_CHRONO_LIBRARY}
     ${Boost_SERIALIZATION_LIBRARY}

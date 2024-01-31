@@ -36,7 +36,7 @@
 #include "math_helper.h"
 #include "seraphis_core/jamtis_support_types.h"
 #include "seraphis_impl/enote_store.h"
-#include "wipeable_string.h"
+#include "wallet/wallet2_basic/wallet2_storage.h"
 
 // standard headers
 #include <string>
@@ -48,6 +48,11 @@ using namespace sp;
 using namespace jamtis;
 using namespace seraphis_wallet;
 
+enum class WalletVersion
+{
+    Legacy,
+    Seraphis
+};
 class wallet3
 {
 // member functions
@@ -67,7 +72,7 @@ class wallet3
 
     // wallet file manipulation
     void prepare_file_names(const std::string &file_path, std::string &keys_file, std::string &wallet_file);
-    void wallet_exists(const std::string &file_path, bool &keys_file_exists, bool &wallet_file_exists);
+    bool check_wallet_filenames(const std::string &file_path, bool &keys_file_exists, bool &wallet_file_exists);
 
     // wallet info
     void print_wallet_type(const crypto::chacha_key &chacha_key);
@@ -104,14 +109,19 @@ class wallet3
     bool save_viewbalance(const std::vector<std::string> &args);
 
 // member variables
+    // legacy wallet
+    wallet2_basic::keys_data m_legacy_keys;
+    wallet2_basic::cache m_legacy_cache;
+
     // wallet file and address
     std::string m_current_address;
     std::string m_keys_file;
     std::string m_wallet_file;
+    WalletVersion m_wallet_version;
+    bool m_load_legacy_wallet;
     std::unique_ptr<tools::file_locker> m_keys_file_locker;
     address_index_t m_current_index{make_address_index(0, 0)};
     WalletType m_wallet_type;
-    bool m_is_wallet3;
     uint64_t m_kdf_rounds;
 
     // keys and enotes storage
