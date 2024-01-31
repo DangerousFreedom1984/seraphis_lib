@@ -39,6 +39,7 @@
 #include "wallet/wallet2_basic/wallet2_storage.h"
 
 // standard headers
+#include <boost/program_options/variables_map.hpp>
 #include <string>
 #include <vector>
 
@@ -65,7 +66,7 @@ class wallet3
    private:
     // load, create and close wallet
     bool create_or_open_wallet();
-    bool load_wallet(const tools::password_container &password);
+    bool load_keys_and_cache_from_file_sp(const tools::password_container &password);
     bool create_new_wallet(const tools::password_container &password);
     bool create_viewbalance(const tools::password_container &password);
     bool close_wallet();
@@ -76,6 +77,7 @@ class wallet3
 
     // wallet info
     void print_wallet_type(const crypto::chacha_key &chacha_key);
+    void get_address_in_use();
 
     // manipulate password
     bool verify_password(const tools::password_container &password);

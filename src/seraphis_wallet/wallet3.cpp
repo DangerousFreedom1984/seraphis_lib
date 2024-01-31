@@ -36,6 +36,7 @@
 #include "common/scoped_message_writer.h"
 #include "console_handler.h"
 #include "crypto/chacha.h"
+#include "cryptonote_config.h"
 #include "key_container.h"
 #include "misc_language.h"
 #include "misc_log_ex.h"
@@ -44,7 +45,6 @@
 
 // seraphis lib
 #include "seraphis_impl/enote_store.h"
-
 #include "wallet/wallet2_basic/wallet2_storage.h"
 
 extern "C"
@@ -192,14 +192,14 @@ bool wallet3::create_or_open_wallet()
         if (keys_file_exists)
         {
             tools::success_msg_writer() << tr("Wallet found");
-            auto pw = password_prompter(tr("Enter your wallet password"), false);
+            auto pw = default_password_prompter(false);
             if (m_wallet_version == WalletVersion::Seraphis)
             {
                 // 3.1 Seraphis wallet keys found
                 try
                 {
                     // 3.1.1 try to load wallet from password
-                    if (load_wallet(pw.get()))
+                    if (load_keys_and_cache_from_file_sp(pw.get()))
                     {
                         wallet_name_valid = true;
                     }
@@ -219,6 +219,10 @@ bool wallet3::create_or_open_wallet()
                 // 3.2.1 Load legacy wallet
                 wallet2_basic::load_keys_and_cache_from_file(
                     m_wallet_file, pw.get().password(), m_legacy_cache, m_legacy_keys);
+                
+                // change network type - load it somewhere else
+                m_current_address = m_legacy_keys.m_account.get_public_address_str(cryptonote::MAINNET);
+                wallet_name_valid = true;
             }
             else
             {
@@ -245,7 +249,7 @@ bool wallet3::create_or_open_wallet()
             {
                 // if 'yes' - create new wallet
                 tools::success_msg_writer() << tr("Generating new seraphis wallet...");
-                auto pw = password_prompter(tr("Enter a new password for the wallet"), false);
+                auto pw = default_password_prompter(true);
 
                 create_new_wallet(pw.get());
 
@@ -259,7 +263,7 @@ bool wallet3::create_or_open_wallet()
     return true;
 }
 //----------------------------------------------------------------------------------------------------
-bool wallet3::load_wallet(const tools::password_container &password)
+bool wallet3::load_keys_and_cache_from_file_sp(const tools::password_container &password)
 {
     // 1. get chacha_key from password
     crypto::chacha_key chacha_key;
@@ -272,10 +276,9 @@ bool wallet3::load_wallet(const tools::password_container &password)
     lock_keys_file();
 
     // TODO
-    // 3. load wallet file
-    m_current_address =
-        m_key_container.get_address_zero(JamtisAddressVersion::V0, JamtisAddressNetwork::MAINNET, chacha_key);
-    tools::msg_writer() << "Wallet default address: " + m_current_address;
+    // 3. load wallet cache file
+        m_current_address =
+            m_key_container.get_address_zero(JamtisAddressVersion::V0, JamtisAddressNetwork::MAINNET, chacha_key);
 
     print_wallet_type(chacha_key);
     return true;
@@ -317,10 +320,10 @@ bool wallet3::create_viewbalance(const tools::password_container &password)
     // 3. write view balance wallet
     m_key_container.write_view_balance(viewbalance_keys + ".spkeys", chacha_key);
 
-    // 3. lock wallet file
+    // 4. lock wallet file
     lock_keys_file();
 
-    // 4. show wallet address for index 0
+    // 5. show wallet address for index 0
     m_current_address =
         m_key_container.get_address_zero(JamtisAddressVersion::V0, JamtisAddressNetwork::MAINNET, chacha_key);
     tools::msg_writer() << "Wallet default address: " + m_current_address;
@@ -351,7 +354,7 @@ void wallet3::prepare_file_names(const std::string &file_path, std::string &keys
 bool wallet3::check_wallet_filenames(const std::string &file_path, bool &keys_file_exists, bool &wallet_file_exists)
 {
     std::string keys_file, wallet_file;
-    bool legacy_keys;
+    bool legacy_keys, legacy_cache;
     WalletVersion version{WalletVersion::Legacy};
 
     boost::system::error_code ignore;
@@ -380,12 +383,29 @@ bool wallet3::check_wallet_filenames(const std::string &file_path, bool &keys_fi
     {
         wallet_file = file_path;
 
-        // if legacy wallet exists and we want to load it, then set keys_file to legacy extension
-        legacy_keys = boost::filesystem::exists(file_path + ".keys", ignore);
-        if (legacy_keys & m_load_legacy_wallet)
+        // if legacy wallet exists
+        legacy_keys  = boost::filesystem::exists(file_path + ".keys", ignore);
+        legacy_cache = boost::filesystem::exists(file_path, ignore);
+        if (legacy_keys && legacy_cache)  // keys and wallet cache
         {
+            // legacy file exist
             keys_file = wallet_file + ".keys";
             version   = WalletVersion::Legacy;
+        }
+        else if (legacy_keys && !legacy_cache)  // keys and no wallet cache
+        {
+            // legacy file exist
+            keys_file = wallet_file + ".keys";
+            version   = WalletVersion::Legacy;
+            tools::msg_writer() << "Wallet keys found but no cache.";
+        }
+        else if (!legacy_keys && legacy_cache)  // no keys and no wallet cache
+        {
+            // legacy file exist
+            keys_file = wallet_file + ".keys";
+            version   = WalletVersion::Legacy;
+            tools::msg_writer() << "Wallet cache found but no keys.";
+            return false;
         }
         // otherwise load or create a seraphis wallet
         else
@@ -537,8 +557,12 @@ std::string wallet3::get_prompt() const
     if (m_locked)
         return std::string("[") + tr("locked due to inactivity") + "]";
 
+    std::string prompt = std::string("[");
     // 2. show wallet address in use
-    std::string prompt = std::string("[") + tr("wallet ") + m_current_address.substr(0, 16);
+    if (m_wallet_version == WalletVersion::Legacy)
+        prompt += "legacy-wallet: " + m_current_address.substr(0, 6);
+    else if (m_wallet_version == WalletVersion::Seraphis)
+        prompt += "seraphis-wallet: " + m_current_address.substr(0, 16);
     prompt += "]: ";
     return prompt;
 }
@@ -739,3 +763,4 @@ bool wallet3::save_viewbalance(const std::vector<std::string> &args)
     }
     return true;
 }
+//----------------------------------------------------------------------------------------------------
