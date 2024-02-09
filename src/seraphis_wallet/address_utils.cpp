@@ -89,7 +89,7 @@ void get_destination_from_str(const std::string &address, JamtisDestinationV1 &d
     std::string checksum_calculated{sp::jamtis::create_address_checksum(address.substr(0, address.length() - 8))};
 
     // 2. test checksum
-    CHECK_AND_ASSERT_THROW_MES(checksum != checksum_calculated, "Checksum mismatch at get_destination_from_str.");
+    CHECK_AND_ASSERT_THROW_MES(checksum == checksum_calculated, "Checksum mismatch at get_destination_from_str.");
 
     // 3. prepare to recover JamtisDestinationV1
     std::string serialized_address;

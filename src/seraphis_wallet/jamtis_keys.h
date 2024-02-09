@@ -55,6 +55,8 @@ namespace jamtis
 ///
 struct JamtisKeys
 {
+    crypto::secret_key k_s_legacy;    //legacy spend-key
+    crypto::secret_key k_v_legacy;    //legacy view-key
     crypto::secret_key k_m;           //master
     crypto::secret_key k_vb;          //view-balance
     crypto::x25519_secret_key xk_ua;  //unlock-amounts
@@ -67,7 +69,9 @@ struct JamtisKeys
 
     bool operator==(const JamtisKeys &other) const {
         // use hash?
-        return other.k_m == k_m &&
+        return other.k_s_legacy == k_s_legacy &&
+            other.k_v_legacy == k_v_legacy &&
+            other.k_m == k_m &&
             other.k_vb == k_vb &&
             other.xk_ua == xk_ua &&
             other.xk_fr == xk_fr &&
@@ -82,11 +86,20 @@ struct JamtisKeys
     void decrypt(const crypto::chacha_key &key, const crypto::chacha_iv &iv);
 };
 
+/// Legacy keys
+struct LegacyKeys
+{
+    crypto::secret_key k_s;  //spend privkey
+    crypto::secret_key k_v;  //view privkey
+    rct::key Ks;             //main spend pubkey: Ks = k_s G
+    rct::key Kv;             //main view pubkey:  Kv = k_v G
+};
+
 /// make a set of mock jamtis keys (for mock-ups/unit testing)
 void make_jamtis_keys(JamtisKeys &keys_out);
 /// make a random jamtis address for the given privkeys
-void make_address_random(const JamtisKeys &user_keys, JamtisDestinationV1 &user_address_out);
-void make_address_zero(const JamtisKeys &user_keys, JamtisDestinationV1 &user_address_out);
+void make_destination_random(const JamtisKeys &user_keys, JamtisDestinationV1 &user_destination_out);
+void make_destination_zero(const JamtisKeys &user_keys, JamtisDestinationV1 &user_destination_out);
 
 } //namespace jamtis
 } //namespace sp

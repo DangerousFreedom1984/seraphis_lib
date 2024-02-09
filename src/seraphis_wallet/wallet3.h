@@ -34,9 +34,12 @@
 #include "crypto/chacha.h"
 #include "key_container.h"
 #include "math_helper.h"
-#include "seraphis_core/jamtis_support_types.h"
 #include "seraphis_impl/enote_store.h"
+#include "seraphis_core/jamtis_support_types.h"
 #include "wallet/wallet2_basic/wallet2_storage.h"
+
+// mocks - to be deleted
+#include "seraphis_mocks/mock_ledger_context.h"
 
 // standard headers
 #include <boost/program_options/variables_map.hpp>
@@ -49,14 +52,32 @@ using namespace sp;
 using namespace jamtis;
 using namespace seraphis_wallet;
 
-enum class WalletVersion
+class wallet3;
+
+enum class WalletDerivation
 {
     Legacy,
     Seraphis
 };
+
+class wallet_keys_unlocker
+{
+   public:
+    wallet_keys_unlocker(wallet3 &w, const boost::optional<tools::password_container> &password);
+    wallet_keys_unlocker(wallet3 &w, bool locked, const epee::wipeable_string &password);
+    ~wallet_keys_unlocker();
+
+   private:
+    wallet3 &m_wallet3;
+    bool m_locked;
+    crypto::chacha_key m_chacha_key;
+    static boost::mutex lockers_lock;
+    static unsigned int lockers;
+};
+
 class wallet3
 {
-// member functions
+    /// member functions
    public:
     wallet3();
     bool init();
@@ -66,28 +87,44 @@ class wallet3
    private:
     // load, create and close wallet
     bool create_or_open_wallet();
-    bool load_keys_and_cache_from_file_sp(const tools::password_container &password);
-    bool create_new_wallet(const tools::password_container &password);
-    bool create_viewbalance(const tools::password_container &password);
+    bool ask_wallet_name(std::string &wallet_path, bool &keys_file_exists, bool &wallet_file_exists);
+    bool try_to_load_wallet(bool &wallet_name_valid);
+    bool try_to_create_wallet(const std::string &wallet_path, bool &wallet_name_valid);
+    bool load_keys_and_cache_from_file_sp(const epee::wipeable_string& password);
+    bool create_new_wallet(const epee::wipeable_string& password);
+    bool handle_legacy_keys(const cryptonote::account_base &legacy_keys, const epee::wipeable_string& password);
     bool close_wallet();
+    
+    // wallet tiers
+    bool create_view_all(const epee::wipeable_string& password);
+    bool create_view_received(const epee::wipeable_string &password);
+    bool create_find_received(const epee::wipeable_string &password);
+    bool create_address_generator(const epee::wipeable_string &password);
 
     // wallet file manipulation
     void prepare_file_names(const std::string &file_path, std::string &keys_file, std::string &wallet_file);
     bool check_wallet_filenames(const std::string &file_path, bool &keys_file_exists, bool &wallet_file_exists);
 
     // wallet info
-    void print_wallet_type(const crypto::chacha_key &chacha_key);
-    void get_address_in_use();
+    void print_wallet_type();
+    void get_current_address(const epee::wipeable_string& password);
 
     // manipulate password
-    bool verify_password(const tools::password_container &password);
+    bool verify_password(const epee::wipeable_string& password);
+    boost::optional<tools::password_container> get_and_verify_password();
     boost::optional<tools::password_container> password_prompter(const char *prompt, bool verify);
-    boost::optional<tools::password_container> default_password_prompter(bool verify);
+    boost::optional<tools::password_container> default_password_prompter(bool creation);
+    void generate_chacha_key_from_password(const epee::wipeable_string &pass, crypto::chacha_key &key);
 
     // lock/unlock key file
     bool is_keys_file_locked() const;
     bool lock_keys_file();
     bool unlock_keys_file();
+
+    // encrypt/decrypt keys in memory
+    bool is_password_expected() const {return m_password_expected;} 
+    void encrypt_keys(const crypto::chacha_key &key);
+    void decrypt_keys(const crypto::chacha_key &key);
 
     // console handler
     bool on_unknown_command(const std::vector<std::string> &args);
@@ -97,7 +134,8 @@ class wallet3
     std::string get_prompt() const;
     bool get_command();
     std::string input_line(const std::string &prompt, bool yesno);
-    tools::scoped_message_writer message_writer(epee::console_colors color = epee::console_color_default, bool bright = false);
+    tools::scoped_message_writer message_writer(epee::console_colors color = epee::console_color_default,
+        bool bright                                                        = false);
 
     // inactivity check and idle thread
     uint32_t inactivity_lock_timeout() const { return m_inactivity_lock_timeout; }
@@ -108,9 +146,18 @@ class wallet3
 
     // commands and help
     bool help(const std::vector<std::string> &args);
-    bool save_viewbalance(const std::vector<std::string> &args);
+    bool save_viewall(const std::vector<std::string> &args);
+    bool save_viewreceived(const std::vector<std::string> &args);
+    bool save_findreceived(const std::vector<std::string> &args);
+    bool save_addrgen(const std::vector<std::string> &args);
 
-// member variables
+    // Experimental testing functions
+    bool create_money(const std::vector<std::string> &args);
+    bool show_balance(const std::vector<std::string> &args);
+    bool transfer(const std::vector<std::string> &args);
+
+    /// member variables
+
     // legacy wallet
     wallet2_basic::keys_data m_legacy_keys;
     wallet2_basic::cache m_legacy_cache;
@@ -119,8 +166,7 @@ class wallet3
     std::string m_current_address;
     std::string m_keys_file;
     std::string m_wallet_file;
-    WalletVersion m_wallet_version;
-    bool m_load_legacy_wallet;
+    WalletDerivation m_wallet_derivation;
     std::unique_ptr<tools::file_locker> m_keys_file_locker;
     address_index_t m_current_index{make_address_index(0, 0)};
     WalletType m_wallet_type;
@@ -129,6 +175,9 @@ class wallet3
     // keys and enotes storage
     KeyContainer m_key_container;
     SpEnoteStore m_enote_store{0, 0, 0};
+
+    // ledger context
+    sp::mocks::MockLedgerContext m_ledger_context{0, 10000};
 
     // multithreading and console handler
     std::atomic<time_t> m_last_activity_time;
@@ -141,4 +190,10 @@ class wallet3
     boost::thread m_idle_thread;
     boost::mutex m_idle_mutex;
     boost::condition_variable m_idle_cond;
+    bool m_password_expected;
+    std::atomic<bool> m_auto_refresh_enabled;
+    bool m_auto_refresh_refreshing;
+
+    friend class wallet_keys_unlocker;
 };
+

@@ -25,11 +25,11 @@ TEST(seraphis_wallet, store_and_load_key_container)
     
     // 2. generate chacha_key and keys of container
     crypto::generate_chacha_key(password.data(),password.length(),chacha_key,kdf_rounds);
-    kc_all.generate_keys(chacha_key);
+    kc_all.generate_keys();
 
     // 3. save keys to file
-    ASSERT_TRUE(kc_all.write_all(wallet_file_all.string(), chacha_key));
-    ASSERT_TRUE(kc_all.write_view_balance(wallet_file_vo.string(), chacha_key));
+    ASSERT_TRUE(kc_all.write_master(wallet_file_all.string(), chacha_key));
+    ASSERT_TRUE(kc_all.write_view_all(wallet_file_vo.string(), chacha_key));
     
     // 4. load keys from file
     ASSERT_TRUE(kc_all_recovered.load_from_keys_file(wallet_file_all.string(), chacha_key, false));
