@@ -380,7 +380,7 @@ bool wallet3::create_new_wallet(const epee::wipeable_string &password)
     m_key_container.generate_keys();
     if (m_key_container.write_master(m_keys_file, chacha_key))
     {
-        m_current_address = m_key_container.get_address_zero(JamtisAddressVersion::V0, JamtisAddressNetwork::MAINNET);
+        m_current_address = m_key_container.get_address_zero(JamtisAddressVersion::V1, JamtisAddressNetwork::MAINNET);
         tools::msg_writer() << "Wallet generated: " + m_current_address;
     }
     else
@@ -576,7 +576,7 @@ void wallet3::get_current_address(const epee::wipeable_string &password)
 
     m_key_container.decrypt(chacha_key);
 
-    m_current_address = m_key_container.get_address_zero(JamtisAddressVersion::V0, JamtisAddressNetwork::MAINNET);
+    m_current_address = m_key_container.get_address_zero(JamtisAddressVersion::V1, JamtisAddressNetwork::MAINNET);
 
     print_wallet_type();
 

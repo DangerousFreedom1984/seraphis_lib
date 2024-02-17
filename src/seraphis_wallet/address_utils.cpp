@@ -1,4 +1,4 @@
-// Copyright (c) 2023, The Monero Project
+// Copyright (c) 2024, The Monero Project
 //
 // All rights reserved.
 //
@@ -46,41 +46,6 @@
 using namespace sp::serialization;
 using namespace std;
 
-// Certainly there are faster ways to stringfy an enum
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-static string address_version_to_string(JamtisAddressVersion version)
-{
-    switch (version)
-    {
-        case JamtisAddressVersion::V0:
-            return string("0");
-        case JamtisAddressVersion::V1:
-            return string("1");
-        default:
-            return "Error. Unknow Jamtis Address Version";
-    }
-}
-//-------------------------------------------------------------------------------------------------------------------
-//-------------------------------------------------------------------------------------------------------------------
-static string address_network_to_string(JamtisAddressNetwork network)
-{
-    switch (network)
-    {
-        case JamtisAddressNetwork::MAINNET:
-            return string("m");
-        case JamtisAddressNetwork::FAKECHAIN:
-            return string("f");
-        case JamtisAddressNetwork::STAGENET:
-            return string("s");
-        case JamtisAddressNetwork::TESTNET:
-            return string("t");
-        default:
-            return "Error. Unknow Jamtis Address Network";
-    }
-}
-//-----------------------------------------------------------------
-//-----------------------------------------------------------------
 void get_destination_from_str(const std::string &address, JamtisDestinationV1 &dest_out)
 {
     // 1. get checksum
@@ -107,8 +72,8 @@ void get_str_from_destination(const JamtisDestinationV1 &dest,
     const JamtisAddressNetwork address_network,
     std::string &address_out)
 {
-    // 1. Initial fixed parameters
-    std::string address_prefix = "xmra";
+    // 1. initial fixed parameters
+    const std::string address_prefix = "xmra";
 
     // 2. prepare to encode string
     sp::serialization::ser_JamtisDestinationV1 serializable_destination;
@@ -117,8 +82,10 @@ void get_str_from_destination(const JamtisDestinationV1 &dest,
     sp::serialization::try_append_serializable(serializable_destination, serialized_address);
 
     // 3. encode string and add to address
-    std::string address = address_prefix + address_version_to_string(address_version) +
-                          address_network_to_string(address_network) + base32::encode(serialized_address);
+    std::string address = address_prefix;
+    address += static_cast<char>(address_version);
+    address += static_cast<char>(address_network);
+    address += base32::encode(serialized_address);
 
     // 4. add checksum and get address_out
     address_out = address + sp::jamtis::create_address_checksum(address);

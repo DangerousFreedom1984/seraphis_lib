@@ -51,7 +51,7 @@ namespace jamtis
 {
 
 ////
-// A set of jamtis keys for mock-ups/unit testing
+// Set of jamtis keys 
 ///
 struct JamtisKeys
 {
@@ -95,7 +95,7 @@ struct LegacyKeys
     rct::key Kv;             //main view pubkey:  Kv = k_v G
 };
 
-/// make a set of mock jamtis keys (for mock-ups/unit testing)
+/// make a set of jamtis keys 
 void make_jamtis_keys(JamtisKeys &keys_out);
 /// make a random jamtis address for the given privkeys
 void make_destination_random(const JamtisKeys &user_keys, JamtisDestinationV1 &user_destination_out);

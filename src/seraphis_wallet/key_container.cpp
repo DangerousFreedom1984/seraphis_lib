@@ -34,13 +34,13 @@
 #include "crypto/crypto.h"
 #include "crypto/x25519.h"
 #include "cryptonote_basic/account.h"
-#include "jamtis_keys.h"
 #include "ringct/rctOps.h"
 #include "seraphis_core/jamtis_core_utils.h"
 #include "seraphis_core/jamtis_destination.h"
 #include "seraphis_core/sp_core_enote_utils.h"
 #include "seraphis_wallet/address_utils.h"
 #include "seraphis_wallet/encrypted_file.h"
+#include "seraphis_wallet/jamtis_keys.h"
 
 // standard headers
 

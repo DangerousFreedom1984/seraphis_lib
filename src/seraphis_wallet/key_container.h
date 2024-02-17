@@ -32,9 +32,9 @@
 #include "crypto/chacha.h"
 #include "crypto/crypto.h"
 #include "cryptonote_basic/account.h"
-#include "jamtis_keys.h"
 #include "seraphis_core/jamtis_destination.h"
 #include "seraphis_wallet/address_utils.h"
+#include "seraphis_wallet/jamtis_keys.h"
 #include "serialization/serialization.h"
 
 // third party headers

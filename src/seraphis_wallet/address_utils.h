@@ -1,4 +1,4 @@
-// Copyright (c) 2023, The Monero Project
+// Copyright (c) 2024, The Monero Project
 //
 // All rights reserved.
 //
@@ -41,24 +41,26 @@
 using namespace sp::jamtis;
 using namespace sp;
 
-enum class JamtisAddressNetwork
+enum class JamtisAddressNetwork : char
 {
-    MAINNET   = 0,
-    TESTNET   = 1,
-    STAGENET  = 2,
-    FAKECHAIN = 3,
-    UNDEFINED = 255
+    MAINNET   = 'm',
+    TESTNET   = 't',
+    STAGENET  = 's',
+    FAKECHAIN = 'f',
 };
 
-enum class JamtisAddressVersion
+enum class JamtisAddressVersion : char
 {
-    V0 = 0,
-    V1 = 1,
+    V1 = '1',
 };
 
+// Given the JamtisDestination, JamtisAddressVersion and JamtisAddressNetwork
+// get the human-readable address format 'xmra...'
 void get_str_from_destination(const JamtisDestinationV1 &dest,
     const JamtisAddressVersion address_version,
     const JamtisAddressNetwork address_network,
     std::string &address_out);
 
+// Given the human-readable address format 'xmra...' 
+// get the JamtisDestination
 void get_destination_from_str(const std::string &address, JamtisDestinationV1 &dest_out);
