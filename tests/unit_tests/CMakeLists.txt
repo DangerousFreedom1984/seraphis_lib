@@ -63,7 +63,6 @@ set(unit_tests_sources
   hmac_keccak.cpp
   http.cpp
   keccak.cpp
-  key_container.cpp
   levin.cpp
   logging.cpp
   long_term_block_weight.cpp
@@ -99,6 +98,8 @@ set(unit_tests_sources
   seraphis_tx.cpp
   sha256.cpp
   slow_memmem.cpp
+  spw_key_container.cpp
+  spw_enote_store.cpp
   subaddress.cpp
   tasking_system_demo.cpp
   test_tx_utils.cpp
