@@ -53,7 +53,7 @@ namespace jamtis
 
 /**
 * brief: make_jamtis_viewbalance_key - view-balance key derived from master for seeing correct account state
-*   k_vb = H_32[k_m]()
+*   k_vb = H_n_x25519[k_m]()
 * param: k_master - k_m
 * outparam: k_view_balance_out - k_vb
 */
