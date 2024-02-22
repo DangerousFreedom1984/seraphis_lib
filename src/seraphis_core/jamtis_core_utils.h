@@ -52,8 +52,8 @@ namespace jamtis
 {
 
 /**
-* brief: make_jamtis_viewbalance_key - view-balance key derived from master for seeing correct account state
-*   k_vb = H_64[k_m]() mod l
+* brief: make_jamtis_viewbalance_key - view-balance key, for viewing all balance information
+*   k_vb = H_n[k_m]()
 * param: k_master - k_m
 * outparam: k_view_balance_out - k_vb
 */

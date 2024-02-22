@@ -54,7 +54,7 @@ namespace jamtis
 void make_jamtis_viewbalance_key(const crypto::secret_key &k_master,
     crypto::secret_key &k_view_balance_out)
 {
-    // k_vb = H_64[k_m]() mod l
+    // k_vb = H_n[k_m]()
     SpKDFTranscript transcript{config::HASH_KEY_JAMTIS_VIEWBALANCE_KEY, 0};
     sp_derive_key(to_bytes(k_master), transcript.data(), transcript.size(), to_bytes(k_view_balance_out));
 }
