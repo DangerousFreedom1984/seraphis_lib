@@ -34,6 +34,7 @@
 
 //local headers
 #include "ringct/rctTypes.h"
+#include "seraphis_impl/serialization_demo_types.h"
 
 //third party headers
 
@@ -61,6 +62,8 @@ struct CheckpointCacheConfig final
     std::uint64_t density_factor;
 };
 
+bool operator==(const CheckpointCacheConfig &a, const CheckpointCacheConfig &b);
+
 ////
 // CheckpointCache
 // - stores a sequence of checkpoints in the range of block ids [refresh index, highest known block index]
@@ -78,11 +81,18 @@ class CheckpointCache
 {
 public:
 //constructors
+    CheckpointCache();
     CheckpointCache(const CheckpointCacheConfig &config, const std::uint64_t min_checkpoint_index);
 
 //member functions
     /// get minimum allowed index
     std::uint64_t min_checkpoint_index() const { return m_min_checkpoint_index; }
+    /// get CheckpointCacheConfig
+    CheckpointCacheConfig get_checkpointcacheconfig() const { return m_config; }
+    /// get window size
+    std::uint64_t get_window_size() const { return m_window_size; }
+    /// get window size
+    std::map<std::uint64_t, rct::key> get_checkpoints() const { return m_checkpoints; }
     /// get the number of stored checkpoints
     std::uint64_t num_checkpoints() const { return m_checkpoints.size(); }
     /// get the highest stored index or 'min index - 1' if cache is empty
@@ -101,6 +111,10 @@ public:
     /// insert block ids starting at the specified index (all old blocks >= first_block_index will be removed)
     void insert_new_block_ids(const std::uint64_t first_block_index, const std::vector<rct::key> &new_block_ids);
 
+    /// setters
+    void set_from_serializable(const serialization::ser_CheckpointCache &serializable);
+    bool operator==(const CheckpointCache &other);
+
 private:
     /// get the window's prune candidate
     std::deque<std::uint64_t>::const_iterator get_window_prune_candidate(const std::deque<std::uint64_t> &window) const;
@@ -113,11 +127,11 @@ private:
 
 //member variables
     /// minimum checkpoint index
-    const std::uint64_t m_min_checkpoint_index;
+    std::uint64_t m_min_checkpoint_index;
 
     /// config
-    const CheckpointCacheConfig m_config;
-    static const std::uint64_t m_window_size{3};
+    CheckpointCacheConfig m_config;
+    std::uint64_t m_window_size{3};
 
     /// stored checkpoints
     std::map<std::uint64_t, rct::key> m_checkpoints;

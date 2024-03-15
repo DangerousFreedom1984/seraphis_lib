@@ -32,6 +32,7 @@
 //local headers
 #include "common/container_helpers.h"
 #include "crypto/crypto.h"
+#include "misc_log_ex.h"
 #include "ringct/rctOps.h"
 #include "ringct/rctTypes.h"
 #include "seraphis_core/binned_reference_set.h"
@@ -39,10 +40,13 @@
 #include "seraphis_core/jamtis_destination.h"
 #include "seraphis_core/jamtis_payment_proposal.h"
 #include "seraphis_core/jamtis_support_types.h"
+#include "seraphis_core/legacy_enote_types.h"
 #include "seraphis_crypto/bulletproofs_plus2.h"
 #include "seraphis_crypto/grootle.h"
 #include "seraphis_crypto/sp_composition_proof.h"
+#include "seraphis_impl/checkpoint_cache.h"
 #include "seraphis_impl/serialization_demo_types.h"
+#include "seraphis_main/contextual_enote_record_types.h"
 #include "seraphis_main/tx_builders_inputs.h"
 #include "seraphis_main/tx_component_types.h"
 #include "seraphis_main/tx_component_types_legacy.h"
@@ -419,6 +423,235 @@ void make_serializable_sp_destination_v1(const jamtis::JamtisDestinationV1 &dest
         sizeof(dest.addr_tag));
 }
 //-------------------------------------------------------------------------------------------------------------------
+void make_serializable_legacy_enote_variant(const LegacyEnoteVariant &enote_variant,
+    ser_LegacyEnoteVariant &serializable_enote_variant_out)
+{
+    if (enote_variant.is_type<LegacyEnoteV1>())
+    {
+        ser_LegacyEnoteV1 ser_enote;
+        LegacyEnoteV1 enote            = enote_variant.unwrap<LegacyEnoteV1>();
+        ser_enote.amount               = enote.amount;
+        ser_enote.onetime_address      = enote.onetime_address;
+        serializable_enote_variant_out = ser_enote;
+    }
+    else if (enote_variant.is_type<LegacyEnoteV2>())
+    {
+        ser_LegacyEnoteV2 ser_enote;
+        LegacyEnoteV2 enote                      = enote_variant.unwrap<LegacyEnoteV2>();
+        ser_enote.amount_commitment              = enote.amount_commitment;
+        ser_enote.onetime_address                = enote.onetime_address;
+        ser_enote.encoded_amount                 = enote.encoded_amount;
+        ser_enote.encoded_amount_blinding_factor = enote.encoded_amount_blinding_factor;
+        serializable_enote_variant_out           = ser_enote;
+    }
+    else if (enote_variant.is_type<LegacyEnoteV3>())
+    {
+        ser_LegacyEnoteV3 ser_enote;
+        LegacyEnoteV3 enote         = enote_variant.unwrap<LegacyEnoteV3>();
+        ser_enote.amount_commitment = enote.amount_commitment;
+        ser_enote.onetime_address   = enote.onetime_address;
+        memcpy(ser_enote.encoded_amount.bytes, enote.encoded_amount.bytes, sizeof(enote.encoded_amount));
+        serializable_enote_variant_out = ser_enote;
+    }
+    else if (enote_variant.is_type<LegacyEnoteV4>())
+    {
+        ser_LegacyEnoteV4 ser_enote;
+        LegacyEnoteV4 enote            = enote_variant.unwrap<LegacyEnoteV4>();
+        ser_enote.onetime_address      = enote.onetime_address;
+        ser_enote.amount               = enote.amount;
+        ser_enote.view_tag             = enote.view_tag.data;
+        serializable_enote_variant_out = ser_enote;
+    }
+    else if (enote_variant.is_type<LegacyEnoteV5>())
+    {
+        ser_LegacyEnoteV5 ser_enote;
+        LegacyEnoteV5 enote         = enote_variant.unwrap<LegacyEnoteV5>();
+        ser_enote.amount_commitment = enote.amount_commitment;
+        ser_enote.onetime_address   = enote.onetime_address;
+        memcpy(ser_enote.encoded_amount.bytes, enote.encoded_amount.bytes, sizeof(enote.encoded_amount));
+        ser_enote.view_tag             = enote.view_tag.data;
+        serializable_enote_variant_out = ser_enote;
+    }
+    else
+    {
+        throw std::runtime_error("Legacy enote variant type not recognized.");
+    }
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_serializable_legacy_intermediate_enote_record_v1(const LegacyIntermediateEnoteRecord &enote_record,
+    ser_LegacyIntermediateEnoteRecord &serializable_enote_record_out)
+{
+    make_serializable_legacy_enote_variant(enote_record.enote, serializable_enote_record_out.enote);
+    serializable_enote_record_out.enote_ephemeral_pubkey = enote_record.enote_ephemeral_pubkey;
+    serializable_enote_record_out.enote_view_extension   = enote_record.enote_view_extension;
+    serializable_enote_record_out.amount                 = enote_record.amount;
+    serializable_enote_record_out.amount_blinding_factor = enote_record.amount_blinding_factor;
+    serializable_enote_record_out.tx_output_index        = enote_record.tx_output_index;
+    serializable_enote_record_out.unlock_time            = enote_record.unlock_time;
+    if (enote_record.address_index)
+        serializable_enote_record_out.address_index = enote_record.address_index;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_serializable_legacy_enote_record(const LegacyEnoteRecord &enote_record,
+    ser_LegacyEnoteRecord &serializable_enote_record_out)
+{
+    make_serializable_legacy_enote_variant(enote_record.enote, serializable_enote_record_out.enote);
+    serializable_enote_record_out.enote_ephemeral_pubkey = enote_record.enote_ephemeral_pubkey;
+    serializable_enote_record_out.enote_view_extension   = enote_record.enote_view_extension;
+    serializable_enote_record_out.amount                 = enote_record.amount;
+    serializable_enote_record_out.amount_blinding_factor = enote_record.amount_blinding_factor;
+    serializable_enote_record_out.key_image              = enote_record.key_image;
+    serializable_enote_record_out.tx_output_index        = enote_record.tx_output_index;
+    serializable_enote_record_out.unlock_time            = enote_record.unlock_time;
+    if (enote_record.address_index)
+        serializable_enote_record_out.address_index = enote_record.address_index;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_serializable_legacy_contextual_intermediate_record_v1(
+    const LegacyContextualIntermediateEnoteRecordV1 &enote_record,
+    ser_LegacyContextualIntermediateEnoteRecordV1 &serializable_contextual_enote_record_out)
+{
+    make_serializable_legacy_intermediate_enote_record_v1(
+        enote_record.record, serializable_contextual_enote_record_out.intermediate_record);
+    make_serializable_sp_enote_origin_context_v1(
+        enote_record.origin_context, serializable_contextual_enote_record_out.origin_context);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_serializable_legacy_contextual_record_v1(const LegacyContextualEnoteRecordV1 &enote_record,
+    ser_LegacyContextualEnoteRecordV1 &serializable_contextual_enote_record_out)
+{
+    make_serializable_legacy_enote_record(enote_record.record, serializable_contextual_enote_record_out.record);
+    make_serializable_sp_enote_origin_context_v1(
+        enote_record.origin_context, serializable_contextual_enote_record_out.origin_context);
+    make_serializable_sp_enote_spent_context_v1(
+        enote_record.spent_context, serializable_contextual_enote_record_out.spent_context);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_serializable_sp_enote_origin_context_v1(const SpEnoteOriginContextV1 &origin_context,
+    ser_SpEnoteOriginContextV1 &origin_context_out)
+{
+    origin_context_out.block_index        = origin_context.block_index;
+    origin_context_out.block_timestamp    = origin_context.block_timestamp;
+    origin_context_out.transaction_id     = origin_context.transaction_id;
+    origin_context_out.enote_tx_index     = origin_context.enote_tx_index;
+    origin_context_out.enote_ledger_index = origin_context.enote_ledger_index;
+    origin_context_out.origin_status      = static_cast<unsigned char>(origin_context.origin_status);
+    origin_context_out.tx_extra           = origin_context.memo;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_serializable_sp_enote_spent_context_v1(const SpEnoteSpentContextV1 &spent_context, ser_SpEnoteSpentContextV1 &spent_context_out)
+{
+    spent_context_out.block_index     = spent_context.block_index;
+    spent_context_out.block_timestamp = spent_context.block_timestamp;
+    spent_context_out.transaction_id  = spent_context.transaction_id;
+    spent_context_out.spent_status    = static_cast<unsigned char>(spent_context.spent_status);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_serializable_sp_enote_variant(const SpEnoteVariant &enote_variant, ser_SpEnoteVariant &enote_variant_out)
+{
+    if (enote_variant.is_type<SpCoinbaseEnoteV1>())
+    {
+        ser_SpCoinbaseEnoteV1 ser_enote;
+        SpCoinbaseEnoteV1 enote = enote_variant.unwrap<SpCoinbaseEnoteV1>();
+        make_serializable_sp_coinbase_enote_v1(enote, ser_enote);
+        enote_variant_out = ser_enote;
+    }
+    else if (enote_variant.is_type<SpEnoteV1>())
+    {
+        ser_SpEnoteV1 ser_enote;
+        SpEnoteV1 enote = enote_variant.unwrap<SpEnoteV1>();
+        make_serializable_sp_enote_v1(enote, ser_enote);
+        enote_variant_out = ser_enote;
+    }
+    else
+    {
+        throw std::runtime_error("Sp enote variant type not recognized.");
+    }
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_serializable_sp_enote_record_v1(const SpEnoteRecordV1 &enote_record, ser_SpEnoteRecordV1 &enote_record_out)
+{
+    make_serializable_sp_enote_variant(enote_record.enote, enote_record_out.enote);
+    enote_record_out.enote_ephemeral_pubkey = enote_record.enote_ephemeral_pubkey;
+    enote_record_out.input_context          = enote_record.input_context;
+    enote_record_out.enote_view_extension_g = enote_record.enote_view_extension_g;
+    enote_record_out.enote_view_extension_x = enote_record.enote_view_extension_x;
+    enote_record_out.enote_view_extension_u = enote_record.enote_view_extension_u;
+    enote_record_out.amount                 = enote_record.amount;
+    enote_record_out.amount_blinding_factor = enote_record.amount_blinding_factor;
+    enote_record_out.key_image              = enote_record.key_image;
+    memcpy(enote_record_out.address_index.bytes, enote_record.address_index.bytes, sizeof(enote_record.address_index));
+    enote_record_out.type = static_cast<unsigned char>(enote_record.type);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_serializable_sp_contextual_enote_record_v1(const SpContextualEnoteRecordV1 &enote_record, ser_SpContextualEnoteRecordV1 &enote_record_out)
+{
+    make_serializable_sp_enote_record_v1(enote_record.record, enote_record_out.record);
+    make_serializable_sp_enote_origin_context_v1(enote_record.origin_context, enote_record_out.origin_context);
+    make_serializable_sp_enote_spent_context_v1(enote_record.spent_context, enote_record_out.spent_context);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_serializable_checkpoint_cache_config(const CheckpointCacheConfig &cache_config, ser_CheckpointCacheConfig &cache_config_out)
+{
+    cache_config_out.num_unprunable = cache_config.num_unprunable;
+    cache_config_out.max_separation = cache_config.max_separation;
+    cache_config_out.density_factor = cache_config.density_factor;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_serializable_checkpoint_cache(const CheckpointCache &checkpointcache, ser_CheckpointCache &checkpointcache_out)
+{
+    checkpointcache_out.min_checkpoint_index = checkpointcache.min_checkpoint_index();
+    make_serializable_checkpoint_cache_config(checkpointcache.get_checkpointcacheconfig(), checkpointcache_out.config);
+    checkpointcache_out.window_size = checkpointcache.get_window_size();
+    checkpointcache_out.checkpoints = checkpointcache.get_checkpoints();
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_serializable_sp_enote_store(const SpEnoteStore &enote_store, ser_SpEnoteStore &enote_store_out)
+{
+    enote_store_out.legacy_intermediate_contextual_enote_records.clear();
+    ser_LegacyContextualIntermediateEnoteRecordV1 ser_legacy_intermediate_record;
+    for (auto &records: enote_store.legacy_intermediate_records())
+    {
+        make_serializable_legacy_contextual_intermediate_record_v1(records.second, ser_legacy_intermediate_record);
+        enote_store_out.legacy_intermediate_contextual_enote_records[records.first] = ser_legacy_intermediate_record;
+    }
+
+    enote_store_out.legacy_contextual_enote_records.clear();
+    ser_LegacyContextualEnoteRecordV1 ser_legacy_record;
+    for (auto &records: enote_store.legacy_records())
+    {
+        make_serializable_legacy_contextual_record_v1(records.second, ser_legacy_record);
+        enote_store_out.legacy_contextual_enote_records[records.first] = ser_legacy_record;
+    }
+
+    enote_store_out.sp_contextual_enote_records.clear();
+    ser_SpContextualEnoteRecordV1 ser_sp_record;
+    for (auto &records: enote_store.sp_records())
+    {
+        make_serializable_sp_contextual_enote_record_v1(records.second, ser_sp_record);
+        enote_store_out.sp_contextual_enote_records[records.first] = ser_sp_record;
+    }
+
+    enote_store_out.legacy_key_images_in_sp_selfsends.clear();
+    ser_SpEnoteSpentContextV1 ser_spent_context;
+    for (auto &context : enote_store.legacy_key_images_in_sp_selfsends())
+    {
+        make_serializable_sp_enote_spent_context_v1(context.second, ser_spent_context);
+        enote_store_out.legacy_key_images_in_sp_selfsends[context.first] = ser_spent_context;
+    }
+
+    enote_store_out.tracked_legacy_onetime_address_duplicates = enote_store.legacy_onetime_address_identifier_map();
+    enote_store_out.legacy_key_images = enote_store.legacy_key_images();
+
+    make_serializable_checkpoint_cache(enote_store.get_legacy_block_id_cache(), enote_store_out.legacy_block_id_cache);
+    make_serializable_checkpoint_cache(enote_store.get_sp_block_id_cache(), enote_store_out.sp_block_id_cache);
+
+    enote_store_out.legacy_partialscan_index = enote_store.top_legacy_partialscanned_block_index();
+    enote_store_out.legacy_fullscan_index = enote_store.top_legacy_fullscanned_block_index();
+    enote_store_out.sp_scanned_index = enote_store.top_sp_scanned_block_index();
+    enote_store_out.default_spendable_age = enote_store.default_spendable_age();
+}
+//-------------------------------------------------------------------------------------------------------------------
 
 //-------------------------------------------------------------------------------------------------------------------
 void recover_bpp2(ser_BulletproofPlus2_PARTIAL &serializable_bpp2_in,
@@ -735,6 +968,184 @@ void recover_sp_destination_v1(const ser_JamtisDestinationV1 &serializable_desti
     memcpy(dest_out.addr_tag.bytes,
         serializable_destination.addr_tag.bytes,
         sizeof(serializable_destination.addr_tag));
+}
+//-------------------------------------------------------------------------------------------------------------------
+void recover_legacy_enote_variant(const ser_LegacyEnoteVariant &serializable_enote_variant,
+    LegacyEnoteVariant &enote_variant_out)
+{
+    if (serializable_enote_variant.is_type<ser_LegacyEnoteV1>())
+    {
+        ser_LegacyEnoteV1 ser_enote = serializable_enote_variant.unwrap<ser_LegacyEnoteV1>();
+        LegacyEnoteV1 enote;
+        enote.amount          = ser_enote.amount;
+        enote.onetime_address = ser_enote.onetime_address;
+        enote_variant_out     = enote;
+    }
+    else if (serializable_enote_variant.is_type<ser_LegacyEnoteV2>())
+    {
+        ser_LegacyEnoteV2 ser_enote = serializable_enote_variant.unwrap<ser_LegacyEnoteV2>();
+        LegacyEnoteV2 enote;
+        enote.amount_commitment              = ser_enote.amount_commitment;
+        enote.onetime_address                = ser_enote.onetime_address;
+        enote.encoded_amount                 = ser_enote.encoded_amount;
+        enote.encoded_amount_blinding_factor = ser_enote.encoded_amount_blinding_factor;
+        enote_variant_out                    = enote;
+    }
+    else if (serializable_enote_variant.is_type<ser_LegacyEnoteV3>())
+    {
+        ser_LegacyEnoteV3 ser_enote = serializable_enote_variant.unwrap<ser_LegacyEnoteV3>();
+        LegacyEnoteV3 enote;
+        enote.amount_commitment = ser_enote.amount_commitment;
+        enote.onetime_address   = ser_enote.onetime_address;
+        memcpy(enote.encoded_amount.bytes, ser_enote.encoded_amount.bytes, sizeof(ser_enote.encoded_amount));
+        enote_variant_out = enote;
+    }
+    else if (serializable_enote_variant.is_type<ser_LegacyEnoteV4>())
+    {
+        ser_LegacyEnoteV4 ser_enote = serializable_enote_variant.unwrap<ser_LegacyEnoteV4>();
+        LegacyEnoteV4 enote;
+        enote.onetime_address = ser_enote.onetime_address;
+        enote.amount          = ser_enote.amount;
+        enote.view_tag.data   = ser_enote.view_tag;
+        enote_variant_out     = enote;
+    }
+    else if (serializable_enote_variant.is_type<ser_LegacyEnoteV5>())
+    {
+        ser_LegacyEnoteV5 ser_enote = serializable_enote_variant.unwrap<ser_LegacyEnoteV5>();
+        LegacyEnoteV5 enote;
+        enote.amount_commitment = ser_enote.amount_commitment;
+        enote.onetime_address   = ser_enote.onetime_address;
+        memcpy(enote.encoded_amount.bytes, ser_enote.encoded_amount.bytes, sizeof(ser_enote.encoded_amount));
+        enote.view_tag.data = ser_enote.view_tag;
+        enote_variant_out   = enote;
+    }
+}
+//-------------------------------------------------------------------------------------------------------------------
+void recover_legacy_intermediate_enote_record(const ser_LegacyIntermediateEnoteRecord &serializable_enote_record,
+    LegacyIntermediateEnoteRecord &enote_record_out)
+{
+    recover_legacy_enote_variant(serializable_enote_record.enote, enote_record_out.enote);
+    enote_record_out.enote_ephemeral_pubkey = serializable_enote_record.enote_ephemeral_pubkey;
+    enote_record_out.enote_view_extension   = serializable_enote_record.enote_view_extension;
+    enote_record_out.amount                 = serializable_enote_record.amount;
+    enote_record_out.amount_blinding_factor = serializable_enote_record.amount_blinding_factor;
+    enote_record_out.tx_output_index        = serializable_enote_record.tx_output_index;
+    enote_record_out.unlock_time            = serializable_enote_record.unlock_time;
+    if (serializable_enote_record.address_index)
+        enote_record_out.address_index = serializable_enote_record.address_index;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void recover_legacy_enote_record(const ser_LegacyEnoteRecord &serializable_enote_record,
+    LegacyEnoteRecord &enote_record_out)
+{
+    recover_legacy_enote_variant(serializable_enote_record.enote, enote_record_out.enote);
+    enote_record_out.enote_ephemeral_pubkey = serializable_enote_record.enote_ephemeral_pubkey;
+    enote_record_out.enote_view_extension   = serializable_enote_record.enote_view_extension;
+    enote_record_out.amount                 = serializable_enote_record.amount;
+    enote_record_out.amount_blinding_factor = serializable_enote_record.amount_blinding_factor;
+    enote_record_out.key_image              = serializable_enote_record.key_image;
+    enote_record_out.tx_output_index        = serializable_enote_record.tx_output_index;
+    enote_record_out.unlock_time            = serializable_enote_record.unlock_time;
+    if (serializable_enote_record.address_index)
+        enote_record_out.address_index = serializable_enote_record.address_index;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void recover_legacy_contextual_intermediate_record(
+    const ser_LegacyContextualIntermediateEnoteRecordV1 &serializable_enote_record,
+    LegacyContextualIntermediateEnoteRecordV1 &contextual_enote_record_out)
+{
+    recover_legacy_intermediate_enote_record(
+        serializable_enote_record.intermediate_record, contextual_enote_record_out.record);
+    recover_sp_enote_origin_context_v1(
+        serializable_enote_record.origin_context, contextual_enote_record_out.origin_context);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void recover_legacy_contextual_record_v1(const ser_LegacyContextualEnoteRecordV1 &serializable_enote_record,
+    LegacyContextualEnoteRecordV1 &contextual_enote_record_out)
+{
+    recover_legacy_enote_record(serializable_enote_record.record, contextual_enote_record_out.record);
+    recover_sp_enote_origin_context_v1(
+        serializable_enote_record.origin_context, contextual_enote_record_out.origin_context);
+    recover_sp_enote_spent_context_v1(
+        serializable_enote_record.spent_context, contextual_enote_record_out.spent_context);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void recover_sp_enote_origin_context_v1(const ser_SpEnoteOriginContextV1 &origin_context,
+    SpEnoteOriginContextV1 &origin_context_out)
+{
+    origin_context_out.block_index        = origin_context.block_index;
+    origin_context_out.block_timestamp    = origin_context.block_timestamp;
+    origin_context_out.transaction_id     = origin_context.transaction_id;
+    origin_context_out.enote_tx_index     = origin_context.enote_tx_index;
+    origin_context_out.enote_ledger_index = origin_context.enote_ledger_index;
+    origin_context_out.origin_status      = static_cast<SpEnoteOriginStatus>(origin_context.origin_status);
+    origin_context_out.memo               = origin_context.tx_extra;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void recover_sp_enote_spent_context_v1(const ser_SpEnoteSpentContextV1 &spent_context,
+    SpEnoteSpentContextV1 &spent_context_out)
+{
+    spent_context_out.block_index     = spent_context.block_index;
+    spent_context_out.block_timestamp = spent_context.block_timestamp;
+    spent_context_out.transaction_id  = spent_context.transaction_id;
+    spent_context_out.spent_status    = static_cast<SpEnoteSpentStatus>(spent_context.spent_status);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void recover_sp_enote_variant(const ser_SpEnoteVariant &serializable_enote_variant, SpEnoteVariant &enote_variant_out)
+{
+    if (serializable_enote_variant.is_type<ser_SpCoinbaseEnoteV1>())
+    {
+        SpCoinbaseEnoteV1 enote;
+        ser_SpCoinbaseEnoteV1 ser_enote = serializable_enote_variant.unwrap<ser_SpCoinbaseEnoteV1>();
+        recover_sp_coinbase_enote_v1(ser_enote,enote);
+        enote_variant_out = enote;
+    }
+    else if (serializable_enote_variant.is_type<ser_SpEnoteV1>())
+    {
+        SpEnoteV1 enote;
+        ser_SpEnoteV1 ser_enote = serializable_enote_variant.unwrap<ser_SpEnoteV1>();
+        recover_sp_enote_v1(ser_enote, enote);
+        enote_variant_out = enote;
+    }
+}
+//-------------------------------------------------------------------------------------------------------------------
+void recover_sp_enote_record_v1(const ser_SpEnoteRecordV1 &serializable_enote_record, SpEnoteRecordV1 &enote_record_out)
+{
+    recover_sp_enote_variant(serializable_enote_record.enote,enote_record_out.enote);
+    enote_record_out.enote_ephemeral_pubkey = serializable_enote_record.enote_ephemeral_pubkey;
+    enote_record_out.input_context = serializable_enote_record.input_context;
+    enote_record_out.enote_view_extension_g = serializable_enote_record.enote_view_extension_g;
+    enote_record_out.enote_view_extension_x = serializable_enote_record.enote_view_extension_x;
+    enote_record_out.enote_view_extension_u = serializable_enote_record.enote_view_extension_u;
+    enote_record_out.amount = serializable_enote_record.amount;
+    enote_record_out.amount_blinding_factor = serializable_enote_record.amount_blinding_factor;
+    enote_record_out.key_image = serializable_enote_record.key_image;
+    memcpy(enote_record_out.address_index.bytes, serializable_enote_record.address_index.bytes, sizeof(serializable_enote_record.address_index));
+    enote_record_out.type = static_cast<jamtis::JamtisEnoteType>(serializable_enote_record.type);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void recover_sp_contextual_enote_record_v1(const ser_SpContextualEnoteRecordV1 &serializable_contextual_record, SpContextualEnoteRecordV1 &contextual_record_out)
+{
+    recover_sp_enote_record_v1(serializable_contextual_record.record, contextual_record_out.record);
+    recover_sp_enote_origin_context_v1(serializable_contextual_record.origin_context, contextual_record_out.origin_context);
+    recover_sp_enote_spent_context_v1(serializable_contextual_record.spent_context, contextual_record_out.spent_context);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void recover_checkpoint_cache_config(const ser_CheckpointCacheConfig &serializable_cacheconfig, CheckpointCacheConfig &cacheconfig_out)
+{
+    cacheconfig_out.num_unprunable = serializable_cacheconfig.num_unprunable;
+    cacheconfig_out.max_separation = serializable_cacheconfig.max_separation;
+    cacheconfig_out.density_factor = serializable_cacheconfig.density_factor;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void recover_checkpoint_cache(const ser_CheckpointCache &serializable_cache, CheckpointCache &cache_out)
+{
+    cache_out.set_from_serializable(serializable_cache);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void recover_sp_enote_store(const ser_SpEnoteStore &serializable_enote_store, SpEnoteStore &enote_store_out)
+{
+   enote_store_out.set_from_serializable(serializable_enote_store);
 }
 //-------------------------------------------------------------------------------------------------------------------
 

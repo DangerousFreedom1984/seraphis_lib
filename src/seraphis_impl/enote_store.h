@@ -35,6 +35,7 @@
 #include "ringct/rctTypes.h"
 #include "seraphis_impl/checkpoint_cache.h"
 #include "seraphis_impl/enote_store_event_types.h"
+#include "seraphis_impl/serialization_demo_types.h"
 #include "seraphis_main/contextual_enote_record_types.h"
 
 //third party headers
@@ -116,6 +117,9 @@ public:
     /// get the legacy [ KI : Ko ] map
     const std::unordered_map<crypto::key_image, rct::key>& legacy_key_images() const
     { return m_legacy_key_images; }
+    /// get the legacy [ KI : Ko ] map
+    const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1>& legacy_key_images_in_sp_selfsends() const
+    { return m_legacy_key_images_in_sp_selfsends; }
     /// get the seraphis [ KI : sp record ] map
     const std::unordered_map<crypto::key_image, SpContextualEnoteRecordV1>& sp_records() const
     { return m_sp_contextual_enote_records; }
@@ -145,6 +149,10 @@ public:
     void set_last_legacy_partialscan_index(const std::uint64_t new_index);
     void set_last_legacy_fullscan_index   (const std::uint64_t new_index);
     void set_last_sp_scanned_index        (const std::uint64_t new_index);
+
+    /// getters for CheckpointCache
+    const CheckpointCache get_legacy_block_id_cache() const {return m_legacy_block_id_cache;}
+    const CheckpointCache get_sp_block_id_cache() const {return m_sp_block_id_cache;}
 
     /// update the store with legacy enote records and associated context
     void update_with_intermediate_legacy_records_from_nonledger(const SpEnoteOriginStatus nonledger_origin_status,
@@ -184,6 +192,9 @@ public:
         const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &found_spent_key_images,
         const std::unordered_map<crypto::key_image, SpEnoteSpentContextV1> &legacy_key_images_in_sp_selfsends,
         std::list<EnoteStoreEvent> &events_inout);
+
+    void set_from_serializable(const serialization::ser_SpEnoteStore &serializable);
+    bool operator==(const SpEnoteStore &other);
 
 private:
     /// update the store with a set of new block ids from the ledger

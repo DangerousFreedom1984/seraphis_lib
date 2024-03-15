@@ -3,9 +3,10 @@
 #include <gtest/gtest.h>
 
 #include "seraphis_core/binned_reference_set_utils.h"
-#include "crypto/chacha.h"
 #include "seraphis_impl/enote_store.h"
 #include "seraphis_impl/enote_store_utils.h"
+#include "seraphis_impl/serialization_demo_types.h"
+#include "seraphis_impl/serialization_demo_utils.h"
 #include "seraphis_wallet/key_container.h"
 #include "seraphis_wallet/send_receive.h"
 #include "unit_tests_utils.h"
@@ -78,28 +79,58 @@ static void create_tx(KeyContainer &key_container, SpEnoteStore &enote_store, mo
 
 TEST(seraphis_wallet, store_and_load_enote_store)
 {
-    // 1. create variables, set password and path
-    KeyContainer kc_all{},kc_all_recovered{},kc_vo{},kc_vb{};
-    SpEnoteStore enote_store{0,0,0};
+    // 1. generate enote_store and tx_store
+    SpEnoteStore enote_store_A{0, 0, 0};
     sp::mocks::MockLedgerContext ledger_context{0, 10000};
-    crypto::chacha_key chacha_key;
-    const uint64_t kdf_rounds = 1;
-    const epee::wipeable_string password = "password";
 
-    // 2. generate chacha_key and keys of container
-    crypto::generate_chacha_key(password.data(),password.length(),chacha_key,kdf_rounds);
-    kc_all.generate_keys();
+    // 2. create user keys
+    KeyContainer kc_A;
+    kc_A.generate_keys();
 
-    // 3. create txs
-    create_tx(kc_all, enote_store, ledger_context);
+    // 3. make some txs
+    for (int i = 0; i<5; i++)
+        create_tx(kc_A, enote_store_A, ledger_context);
 
-    // 4. serialize enote_store
+    // 4. get all enote records
+    std::vector<SpContextualEnoteRecordV1> all_enote_records;
+    all_enote_records.reserve(enote_store_A.sp_records().size());
 
-    // 5. save enote_store to file
+    for (const auto &enote_record : enote_store_A.sp_records())
+        all_enote_records.push_back(enote_record.second);
 
-    // 6. load enote_store from file
+    // 5. serialize enote record
+    sp::serialization::ser_SpContextualEnoteRecordV1 ser_sp_contextual_record;
+    make_serializable_sp_contextual_enote_record_v1(all_enote_records[0], ser_sp_contextual_record);
 
-    // 7. deserialize
+    // 6. get string
+    std::string str_serialized_sp_contextual_record;
+    try_append_serializable(ser_sp_contextual_record, str_serialized_sp_contextual_record);
 
-    // 8. compare if they are equal
+    // 6. recover from string
+    sp::serialization::ser_SpContextualEnoteRecordV1 ser_recovered_serializable_enote_record;
+    try_get_serializable(epee::strspan<std::uint8_t>(str_serialized_sp_contextual_record), ser_recovered_serializable_enote_record);
+
+    // 7. recover enote record
+    SpContextualEnoteRecordV1 recovered_enote_record;
+    recover_sp_contextual_enote_record_v1(ser_recovered_serializable_enote_record, recovered_enote_record);
+
+    // 8. test if contextual records are the same
+    EXPECT_TRUE(recovered_enote_record == all_enote_records[0]);
+
+    // 9. serialize enote_store
+    sp::serialization::ser_SpEnoteStore ser_enote_store;
+    make_serializable_sp_enote_store(enote_store_A, ser_enote_store);
+
+    // 10. write serializable into str
+    std::string str_serialized_enote_store;
+    try_append_serializable(ser_enote_store, str_serialized_enote_store);
+
+    // 11. recover serializable from str
+    sp::serialization::ser_SpEnoteStore recovered_serializable;
+    try_get_serializable(epee::strspan<std::uint8_t>(str_serialized_enote_store), recovered_serializable);
+
+    // 12. recover struct from serializable
+    SpEnoteStore recovered_enote_store{0, 0, 0};
+    recover_sp_enote_store(recovered_serializable, recovered_enote_store);
+    EXPECT_TRUE(recovered_enote_store==enote_store_A);
 }

@@ -38,11 +38,14 @@
 #include "seraphis_core/discretized_fee.h"
 #include "seraphis_core/jamtis_destination.h"
 #include "seraphis_core/jamtis_support_types.h"
-#include "serialization/containers.h"
-#include "serialization/crypto.h"
-#include "serialization/serialization.h"
+#include "seraphis_core/legacy_enote_types.h"
+#include "seraphis_main/contextual_enote_record_types.h"
 #include "seraphis_main/txtype_coinbase_v1.h"
 #include "seraphis_main/txtype_squashed_v1.h"
+
+#include "serialization/crypto.h"
+#include "serialization/serialization.h"
+#include "serialization/pair.h"
 
 //third party headers
 
@@ -481,6 +484,378 @@ struct ser_JamtisPaymentProposalSelfSendV1 final
     END_SERIALIZE()
 };
 
+
+// EnoteStore serialization
+
+// LegacyEnote types
+struct ser_LegacyEnoteV1 final
+{
+    /// Ko
+    rct::key onetime_address;
+    /// a
+    rct::xmr_amount amount;
+
+    BEGIN_SERIALIZE()
+        FIELD(onetime_address)
+        FIELD(amount)
+    END_SERIALIZE()
+};
+
+struct ser_LegacyEnoteV2 final
+{
+    /// Ko
+    rct::key onetime_address;
+    /// C
+    rct::key amount_commitment;
+    /// enc(x)
+    rct::key encoded_amount_blinding_factor;
+    /// enc(a)
+    rct::key encoded_amount;
+
+    BEGIN_SERIALIZE()
+        FIELD(onetime_address)
+        FIELD(amount_commitment)
+        FIELD(encoded_amount_blinding_factor)
+        FIELD(encoded_amount)
+    END_SERIALIZE()
+};
+
+struct ser_LegacyEnoteV3 final
+{
+    /// Ko
+    rct::key onetime_address;
+    /// C
+    rct::key amount_commitment;
+    /// enc(a)
+    ser_encoded_amount_t encoded_amount;
+
+    BEGIN_SERIALIZE()
+        FIELD(onetime_address)
+        FIELD(amount_commitment)
+        FIELD(encoded_amount)
+    END_SERIALIZE()
+};
+
+
+struct ser_LegacyEnoteV4 final
+{
+    /// Ko
+    rct::key onetime_address;
+    /// a
+    rct::xmr_amount amount;
+    /// view_tag
+    unsigned char view_tag;
+
+    BEGIN_SERIALIZE()
+        FIELD(onetime_address)
+        FIELD(amount)
+        FIELD(view_tag)
+    END_SERIALIZE()
+};
+
+
+struct ser_LegacyEnoteV5 final
+{
+    /// Ko
+    rct::key onetime_address;
+    /// C
+    rct::key amount_commitment;
+    /// enc(a)
+    ser_encoded_amount_t encoded_amount;
+    /// view_tag
+    unsigned char view_tag;
+
+    BEGIN_SERIALIZE()
+        FIELD(onetime_address)
+        FIELD(amount_commitment)
+        FIELD(encoded_amount)
+        FIELD(view_tag)
+    END_SERIALIZE()
+};
+struct ser_SpEnoteOriginContextV1 final
+{
+    /// block index of tx (-1 if index is unknown)
+    std::uint64_t block_index;
+    /// timestamp of tx's block (-1 if timestamp is unknown)
+    std::uint64_t block_timestamp;
+    /// tx id of the tx (0 if tx is unknown)
+    rct::key transaction_id;
+    /// index of the enote in the tx's output set (-1 if index is unknown)
+    std::uint64_t enote_tx_index;
+    /// ledger index of the enote (-1 if index is unknown)
+    std::uint64_t enote_ledger_index;
+    /// origin status (off-chain by default)
+    unsigned char origin_status;
+    /// tx memo
+    std::vector<unsigned char> tx_extra;
+
+    BEGIN_SERIALIZE_OBJECT();
+        FIELD(block_index);
+        FIELD(block_timestamp);
+        FIELD(transaction_id);
+        FIELD(enote_tx_index);
+        FIELD(enote_ledger_index);
+        FIELD(origin_status);
+        FIELD(tx_extra);
+    END_SERIALIZE();
+};
+
+struct ser_SpEnoteSpentContextV1 final
+{
+    /// block index of tx where it was spent (-1 if unspent or index is unknown)
+    std::uint64_t block_index;
+    /// timestamp of tx's block (-1 if timestamp is unknown)
+    std::uint64_t block_timestamp;
+    /// tx id of the tx where it was spent (0 if unspent or tx is unknown)
+    rct::key transaction_id;
+    /// spent status (unspent by default)
+    unsigned char spent_status;
+
+    BEGIN_SERIALIZE_OBJECT();
+        FIELD(block_index);
+        FIELD(block_timestamp);
+        FIELD(transaction_id);
+        FIELD(spent_status);
+    END_SERIALIZE();
+};
+
+using ser_LegacyEnoteVariant = tools::variant<ser_LegacyEnoteV1,ser_LegacyEnoteV2, ser_LegacyEnoteV3, ser_LegacyEnoteV4, ser_LegacyEnoteV5>;
+struct ser_LegacyIntermediateEnoteRecord final
+{
+    /// original enote
+    ser_LegacyEnoteVariant enote;
+    /// the enote's ephemeral pubkey
+    rct::key enote_ephemeral_pubkey;
+    /// enote view privkey = [address: Hn(r K^v, t)] [subaddress (i): Hn(r K^{v,i}, t) + Hn(k^v, i)]
+    crypto::secret_key enote_view_extension;
+    /// a: amount
+    rct::xmr_amount amount;
+    /// x: amount blinding factor
+    crypto::secret_key amount_blinding_factor;
+    /// i: legacy address index (if true, then it's owned by a subaddress)
+    boost::optional<cryptonote::subaddress_index> address_index;
+    /// t: the enote's index in its transaction
+    std::uint64_t tx_output_index;
+    /// u: the enote's unlock time
+    std::uint64_t unlock_time;
+
+    BEGIN_SERIALIZE_OBJECT();
+        FIELD(enote);
+        FIELD(enote_ephemeral_pubkey);
+        FIELD(enote_view_extension);
+        FIELD(amount);
+        FIELD(amount_blinding_factor);
+        if (address_index)
+            FIELD(address_index.get());
+        FIELD(tx_output_index);
+        FIELD(unlock_time);
+    END_SERIALIZE();
+};
+
+struct ser_LegacyEnoteRecord final
+{
+    /// original enote
+    ser_LegacyEnoteVariant enote;
+    /// the enote's ephemeral pubkey
+    rct::key enote_ephemeral_pubkey;
+    /// enote view privkey = [address: Hn(r K^v, t)] [subaddress (i): Hn(r K^{v,i}, t) + Hn(k^v, i)]
+    crypto::secret_key enote_view_extension;
+    /// a: amount
+    rct::xmr_amount amount;
+    /// x: amount blinding factor
+    crypto::secret_key amount_blinding_factor;
+    /// KI: key image
+    crypto::key_image key_image;
+    /// i: legacy address index (if true, then it's owned by a subaddress)
+    boost::optional<cryptonote::subaddress_index> address_index;
+    /// t: the enote's index in its transaction
+    std::uint64_t tx_output_index;
+    /// u: the enote's unlock time
+    std::uint64_t unlock_time;
+
+    BEGIN_SERIALIZE_OBJECT();
+        FIELD(enote);
+        FIELD(enote_ephemeral_pubkey);
+        FIELD(enote_view_extension);
+        FIELD(amount);
+        FIELD(amount_blinding_factor);
+        FIELD(key_image)
+        if (address_index)
+            FIELD(address_index.get());
+        FIELD(tx_output_index);
+        FIELD(unlock_time);
+    END_SERIALIZE();
+};
+
+struct ser_LegacyContextualIntermediateEnoteRecordV1 final
+{
+    /// info about the enote
+    ser_LegacyIntermediateEnoteRecord intermediate_record;
+    /// info about where the enote was found
+    ser_SpEnoteOriginContextV1 origin_context;
+
+    BEGIN_SERIALIZE_OBJECT();
+        FIELD(intermediate_record);
+        FIELD(origin_context);
+    END_SERIALIZE();
+};
+
+struct ser_LegacyContextualEnoteRecordV1 final
+{
+    /// info about the enote
+    ser_LegacyEnoteRecord record;
+    /// info about where the enote was found
+    ser_SpEnoteOriginContextV1 origin_context;
+    /// info about where the enote was spent
+    ser_SpEnoteSpentContextV1 spent_context;
+
+    BEGIN_SERIALIZE_OBJECT();
+        FIELD(record);
+        FIELD(origin_context);
+        FIELD(spent_context);
+    END_SERIALIZE();
+};
+
+
+using ser_SpEnoteVariant = tools::variant<ser_SpCoinbaseEnoteV1, ser_SpEnoteV1>;
+struct ser_SpEnoteRecordV1 final
+{
+    /// original enote
+    ser_SpEnoteVariant enote;
+    /// the enote's ephemeral pubkey
+    crypto::x25519_pubkey enote_ephemeral_pubkey;
+    /// context of the tx input(s) associated with this enote
+    rct::key input_context;
+    /// k_{g, sender} + k_{g, address}: enote view extension for G component
+    crypto::secret_key enote_view_extension_g;
+    /// k_{x, sender} + k_{x, address}: enote view extension for X component (excludes k_vb)
+    crypto::secret_key enote_view_extension_x;
+    /// k_{u, sender} + k_{u, address}: enote view extension for U component (excludes k_m)
+    crypto::secret_key enote_view_extension_u;
+    /// a: amount
+    rct::xmr_amount amount;
+    /// x: amount blinding factor
+    crypto::secret_key amount_blinding_factor;
+    /// KI: key image
+    crypto::key_image key_image;
+    /// j: jamtis address index
+    ser_address_index_t address_index;
+    /// jamtis enote type
+    unsigned char type;
+
+    BEGIN_SERIALIZE_OBJECT();
+        FIELD(enote);
+        FIELD(enote_ephemeral_pubkey);
+        FIELD(input_context);
+        FIELD(enote_view_extension_g);
+        FIELD(enote_view_extension_x);
+        FIELD(enote_view_extension_u);
+        FIELD(amount);
+        FIELD(amount_blinding_factor);
+        FIELD(key_image);
+        FIELD(address_index);
+        FIELD(type);
+    END_SERIALIZE();
+};
+
+struct ser_SpContextualEnoteRecordV1 final
+{
+    /// info about the enote
+    ser_SpEnoteRecordV1 record;
+    /// info about where the enote was found
+    ser_SpEnoteOriginContextV1 origin_context;
+    /// info about where the enote was spent
+    ser_SpEnoteSpentContextV1 spent_context;
+
+    BEGIN_SERIALIZE_OBJECT();
+        FIELD(record);
+        FIELD(origin_context);
+        FIELD(spent_context);
+    END_SERIALIZE();
+};
+
+struct ser_CheckpointCacheConfig final
+{
+    /// number of checkpoints that shouldn't be pruned
+    std::uint64_t num_unprunable;
+    /// maximum separation between checkpoints
+    std::uint64_t max_separation;
+    /// density factor for calibrating the decay rate of checkpoint density
+    std::uint64_t density_factor;
+
+    BEGIN_SERIALIZE_OBJECT();
+        FIELD(num_unprunable);
+        FIELD(max_separation);
+        FIELD(density_factor);
+    END_SERIALIZE();
+};
+struct ser_CheckpointCache final
+{
+    /// minimum checkpoint index
+    std::uint64_t min_checkpoint_index;
+    /// config
+    ser_CheckpointCacheConfig config;
+    /// window size
+    std::uint64_t window_size;
+    /// stored checkpoints
+    std::map<std::uint64_t, rct::key> checkpoints;
+
+    BEGIN_SERIALIZE_OBJECT();
+        FIELD(min_checkpoint_index);
+        FIELD(config);
+        FIELD(window_size);
+        FIELD(checkpoints);
+    END_SERIALIZE();
+};
+
+struct ser_SpEnoteStore final
+{
+    /// legacy intermediate enotes: [ legacy identifier : legacy intermediate record ]
+    std::unordered_map<rct::key, ser_LegacyContextualIntermediateEnoteRecordV1>
+        legacy_intermediate_contextual_enote_records;
+    /// legacy enotes: [ legacy identifier : legacy record ]
+    std::unordered_map<rct::key, ser_LegacyContextualEnoteRecordV1> legacy_contextual_enote_records;
+    /// seraphis enotes: [ seraphis KI : seraphis record ]
+    std::unordered_map<crypto::key_image, ser_SpContextualEnoteRecordV1> sp_contextual_enote_records;
+    /// saved legacy key images from txs with seraphis selfsends (i.e. from txs we created)
+    /// [ legacy KI : spent context ]
+    std::unordered_map<crypto::key_image, ser_SpEnoteSpentContextV1> legacy_key_images_in_sp_selfsends;
+    /// legacy duplicate tracker for dealing with enotes that have duplicated key images
+    /// [ Ko : [ legacy identifier ] ]
+    std::unordered_map<rct::key, std::unordered_set<rct::key>> tracked_legacy_onetime_address_duplicates;
+    /// legacy onetime addresses attached to known legacy enotes
+    /// [ legacy KI : legacy Ko ]
+    std::unordered_map<crypto::key_image, rct::key> legacy_key_images;
+    /// cached block ids in range: [refresh index, end of known legacy-supporting chain]
+    ser_CheckpointCache legacy_block_id_cache;
+    /// cached block ids in range:
+    ///   [max(refresh index, first seraphis-enabled block), end of known seraphis-supporting chain]
+    ser_CheckpointCache sp_block_id_cache;
+    /// highest block that was legacy partialscanned (view-scan only)
+    std::uint64_t legacy_partialscan_index;
+    /// highest block that was legacy fullscanned (view-scan + comprehensive key image checks)
+    std::uint64_t legacy_fullscan_index;
+    /// highest block that was seraphis view-balance scanned
+    std::uint64_t sp_scanned_index;
+    /// configuration value: default spendable age; an enote is considered 'spendable' in the next block if it is
+    ///   on-chain and the next block's index is >= 'enote origin index + max(1, default_spendable_age)'; legacy
+    ///   enotes also have an unlock_time attribute on top of the default spendable age
+    std::uint64_t default_spendable_age;
+
+    BEGIN_SERIALIZE_OBJECT();
+        FIELD(legacy_intermediate_contextual_enote_records);
+        FIELD(legacy_contextual_enote_records);
+        FIELD(sp_contextual_enote_records);
+        FIELD(legacy_key_images);
+        FIELD(legacy_block_id_cache);
+        FIELD(sp_block_id_cache);
+        FIELD(legacy_partialscan_index);
+        FIELD(legacy_fullscan_index);
+        FIELD(sp_scanned_index);
+        FIELD(default_spendable_age);
+    END_SERIALIZE();
+};
+
 } //namespace serialization
 } //namespace sp
 
@@ -488,3 +863,6 @@ BLOB_SERIALIZER(sp::serialization::ser_address_index_t);
 BLOB_SERIALIZER(sp::serialization::ser_address_tag_t);
 BLOB_SERIALIZER(sp::serialization::ser_encrypted_address_tag_t);
 BLOB_SERIALIZER(sp::serialization::ser_encoded_amount_t);
+
+BLOB_SERIALIZER(sp::serialization::ser_LegacyEnoteVariant);
+BLOB_SERIALIZER(sp::serialization::ser_SpEnoteVariant);

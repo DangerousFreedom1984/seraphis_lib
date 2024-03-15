@@ -34,17 +34,22 @@
 #pragma once
 
 //local headers
+#include "checkpoint_cache.h"
 #include "crypto/crypto.h"
+#include "enote_store.h"
 #include "ringct/rctTypes.h"
 #include "seraphis_core/binned_reference_set.h"
 #include "seraphis_core/discretized_fee.h"
 #include "seraphis_core/jamtis_destination.h"
+#include "seraphis_core/legacy_enote_types.h"
 #include "seraphis_core/sp_core_types.h"
+#include "seraphis_impl/checkpoint_cache.h"
 #include "seraphis_impl/serialization_demo_types.h"
+#include "seraphis_main/contextual_enote_record_types.h"
+#include "seraphis_main/enote_record_types.h"
 #include "seraphis_main/tx_component_types.h"
 #include "seraphis_main/tx_component_types_legacy.h"
 #include "seraphis_main/txtype_squashed_v1.h"
-#include "serialization/binary_archive.h"
 #include "serialization/serialization.h"
 #include "span.h"
 
@@ -122,6 +127,7 @@ void make_serializable_sp_binned_reference_set_v1(const SpBinnedReferenceSetV1 &
     ser_SpBinnedReferenceSetV1_PARTIAL &serializable_refset_out);
 void make_serializable_legacy_enote_image_v2(const LegacyEnoteImageV2 &image,
     ser_LegacyEnoteImageV2 &serializable_image_out);
+void make_serializable_sp_enote_coinbase_v1(const SpCoinbaseEnoteV1 &coinbase_enote, ser_SpCoinbaseEnoteV1 &coinbase_enote_out);
 void make_serializable_sp_enote_v1(const SpEnoteV1 &enote, ser_SpEnoteV1 &serializable_enote_out);
 void make_serializable_sp_enote_image_v1(const SpEnoteImageV1 &image, ser_SpEnoteImageV1 &serializable_image_out);
 void make_serializable_sp_balance_proof_v1(const SpBalanceProofV1 &proof,
@@ -138,7 +144,29 @@ void make_serializable_discretized_fee(const DiscretizedFee discretized_fee,
     unsigned char &serializable_discretized_fee_out);
 void make_serializable_sp_tx_coinbase_v1(const SpTxCoinbaseV1 &tx, ser_SpTxCoinbaseV1 &serializable_tx_out);
 void make_serializable_sp_tx_squashed_v1(const SpTxSquashedV1 &tx, ser_SpTxSquashedV1 &serializable_tx_out);
-void make_serializable_sp_destination_v1(const jamtis::JamtisDestinationV1 &dest, ser_JamtisDestinationV1 &serializable_dest_out); 
+void make_serializable_sp_destination_v1(const jamtis::JamtisDestinationV1 &dest, ser_JamtisDestinationV1 &serializable_dest_out);
+void make_serializable_legacy_enote_variant(const LegacyEnoteVariant &enote_variant,
+    ser_LegacyEnoteVariant &serializable_enote_variant_out);
+void make_serializable_legacy_intermediate_enote_record_v1(const LegacyIntermediateEnoteRecord &enote_record,
+    ser_LegacyIntermediateEnoteRecord &serializable_enote_record_out);
+void make_serializable_legacy_enote_record(const LegacyEnoteRecord &enote_record,
+    ser_LegacyEnoteRecord &serializable_enote_record_out);
+void make_serializable_legacy_contextual_intermediate_record_v1(
+    const LegacyContextualIntermediateEnoteRecordV1 &enote_record,
+    ser_LegacyContextualIntermediateEnoteRecordV1 &serializable_contextual_enote_record_out);
+void make_serializable_legacy_contextual_record_v1(const LegacyContextualEnoteRecordV1 &enote_record,
+    ser_LegacyContextualEnoteRecordV1 &serializable_contextual_enote_record_out);
+void make_serializable_sp_enote_origin_context_v1(const SpEnoteOriginContextV1 &origin_context,
+    ser_SpEnoteOriginContextV1 &origin_context_out);
+void make_serializable_sp_enote_spent_context_v1(const SpEnoteSpentContextV1 &spent_context,
+    ser_SpEnoteSpentContextV1 &spent_context_out);
+void make_serializable_sp_enote_variant(const SpEnoteVariant &enote_variant, ser_SpEnoteVariant &enote_variant_out);
+void make_serializable_sp_enote_record_v1(const SpEnoteRecordV1 &enote_record, ser_SpEnoteRecordV1 &enote_record_out);
+void make_serializable_sp_contextual_enote_record_v1(const SpContextualEnoteRecordV1 &enote_record, ser_SpContextualEnoteRecordV1 &enote_record_out);
+void make_serializable_checkpoint_cache_config(const CheckpointCacheConfig &cache_config, ser_CheckpointCacheConfig &cache_config_out);
+void make_serializable_checkpoint_cache(const CheckpointCache &checkpointcache, ser_CheckpointCache &checkpointcache_out);
+void make_serializable_sp_enote_store(const SpEnoteStore &enote_store, ser_SpEnoteStore &enote_store_out);
+
 /**
 * brief: recover_* - convert a serializable object back into its normal object parent
 * param: serializable_object_in - serializable object to be consumed (destructive: may be left in an unusable state)
@@ -193,6 +221,25 @@ bool try_recover_sp_tx_squashed_v1(ser_SpTxSquashedV1 &serializable_tx_in,
     SpTxSquashedV1 &tx_out);
 bool try_recover_sp_tx_squashed_v1(ser_SpTxSquashedV1 &serializable_tx_in, SpTxSquashedV1 &tx_out);
 void recover_sp_destination_v1(const ser_JamtisDestinationV1 &serializable_destination, jamtis::JamtisDestinationV1 &dest_out);
+void recover_legacy_enote_variant(const ser_LegacyEnoteVariant &serializable_enote_variant, LegacyEnoteVariant &enote_variant_out);
+void recover_legacy_intermediate_enote_record(const ser_LegacyIntermediateEnoteRecord &serializable_enote_record, LegacyIntermediateEnoteRecord &enote_record_out);
+void recover_legacy_enote_record(const ser_LegacyEnoteRecord &serializable_enote_record,
+    LegacyEnoteRecord &enote_record_out);
+void recover_legacy_contextual_intermediate_record(
+    const ser_LegacyContextualIntermediateEnoteRecordV1 &serializable_enote_record,
+    LegacyContextualIntermediateEnoteRecordV1 &contextual_enote_record_out);
+void recover_legacy_contextual_record_v1(const ser_LegacyContextualEnoteRecordV1 &serializable_enote_record,
+    LegacyContextualEnoteRecordV1 &contextual_enote_record_out);
+void recover_sp_enote_origin_context_v1(const ser_SpEnoteOriginContextV1 &serializable_origin_context,
+    SpEnoteOriginContextV1 &origin_context_out);
+void recover_sp_enote_spent_context_v1(const ser_SpEnoteSpentContextV1 &serializable_spent_context,
+    SpEnoteSpentContextV1 &spent_context_out);
+void recover_sp_enote_variant(const ser_SpEnoteVariant &serializable_enote_variant, SpEnoteVariant &enote_variant_out);
+void recover_sp_enote_record_v1(const ser_SpEnoteRecordV1 &serializable_enote_record, SpEnoteRecordV1 &enote_record_out);
+void recover_sp_contextual_enote_record_v1(const ser_SpContextualEnoteRecordV1 &serializable_contextual_record, SpContextualEnoteRecordV1 &contextual_record_out);
+void recover_checkpoint_cache_config(const ser_CheckpointCacheConfig &serializable_cacheconfig, CheckpointCacheConfig &cacheconfig_out);
+void recover_checkpoint_cache(const ser_CheckpointCache &serializable_cache, CheckpointCache &cache_out);
+void recover_sp_enote_store(const ser_SpEnoteStore &serializable_enote_store, SpEnoteStore &enote_store_out);
 
 } //namespace serialization
 } //namespace sp

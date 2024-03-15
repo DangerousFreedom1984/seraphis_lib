@@ -37,6 +37,8 @@
 #include "seraphis_core/legacy_enote_utils.h"
 #include "seraphis_impl/enote_store_event_types.h"
 #include "seraphis_impl/enote_store_utils.h"
+#include "seraphis_impl/serialization_demo_types.h"
+#include "seraphis_impl/serialization_demo_utils.h"
 #include "seraphis_main/contextual_enote_record_types.h"
 #include "seraphis_main/contextual_enote_record_utils.h"
 #include "seraphis_main/enote_record_utils_legacy.h"
@@ -44,7 +46,6 @@
 //third party headers
 
 //standard headers
-#include <functional>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -1322,6 +1323,68 @@ void SpEnoteStore::handle_legacy_key_images_from_sp_selfsends(
                 events_inout.emplace_back(UpdatedLegacySpentContext{record_ref->first});
         }
     }
+}
+//-------------------------------------------------------------------------------------------------------------------
+void SpEnoteStore::set_from_serializable(const serialization::ser_SpEnoteStore &serializable)
+{
+
+    m_legacy_intermediate_contextual_enote_records.clear();
+    LegacyContextualIntermediateEnoteRecordV1 legacy_intermediate_record;
+    for (const auto &records: serializable.legacy_intermediate_contextual_enote_records)
+    {
+        recover_legacy_contextual_intermediate_record(records.second, legacy_intermediate_record);
+        m_legacy_intermediate_contextual_enote_records[records.first] = legacy_intermediate_record;
+    }
+
+    m_legacy_contextual_enote_records.clear();
+    LegacyContextualEnoteRecordV1 legacy_record;
+    for (const auto &records: serializable.legacy_contextual_enote_records)
+    {
+        recover_legacy_contextual_record_v1(records.second, legacy_record);
+        m_legacy_contextual_enote_records[records.first] = legacy_record;
+    }
+
+    m_sp_contextual_enote_records.clear();
+    SpContextualEnoteRecordV1 sp_record;
+    for (const auto &records: serializable.sp_contextual_enote_records)
+    {
+        recover_sp_contextual_enote_record_v1(records.second, sp_record);
+        m_sp_contextual_enote_records[records.first] = sp_record;
+    }
+
+    m_legacy_key_images_in_sp_selfsends.clear();
+    SpEnoteSpentContextV1 spent_context;
+    for (const auto &context : serializable.legacy_key_images_in_sp_selfsends)
+    {
+        recover_sp_enote_spent_context_v1(context.second, spent_context);
+        m_legacy_key_images_in_sp_selfsends[context.first] = spent_context;
+    }
+
+    m_tracked_legacy_onetime_address_duplicates = serializable.tracked_legacy_onetime_address_duplicates;
+    m_legacy_key_images = serializable.legacy_key_images;
+
+    serialization::recover_checkpoint_cache(serializable.legacy_block_id_cache,m_legacy_block_id_cache);
+    serialization::recover_checkpoint_cache(serializable.sp_block_id_cache, m_sp_block_id_cache);
+
+    m_legacy_partialscan_index = serializable.legacy_partialscan_index;
+    m_legacy_fullscan_index = serializable.legacy_fullscan_index;
+    m_sp_scanned_index = serializable.sp_scanned_index;
+    m_default_spendable_age = serializable.default_spendable_age;
+}
+//-------------------------------------------------------------------------------------------------------------------
+bool SpEnoteStore::operator==(const SpEnoteStore &other)
+{
+    return m_legacy_intermediate_contextual_enote_records == other.m_legacy_intermediate_contextual_enote_records &&
+           m_legacy_contextual_enote_records              == other.m_legacy_contextual_enote_records &&
+           m_sp_contextual_enote_records                  == other.m_sp_contextual_enote_records &&
+           m_legacy_key_images                            == other.m_legacy_key_images &&
+           m_tracked_legacy_onetime_address_duplicates    == other.m_tracked_legacy_onetime_address_duplicates &&
+           m_legacy_block_id_cache                        == other.m_legacy_block_id_cache &&
+           m_sp_block_id_cache                            == other.m_sp_block_id_cache &&
+           m_legacy_partialscan_index                     == other.m_legacy_partialscan_index &&
+           m_legacy_fullscan_index                        == other.m_legacy_fullscan_index &&
+           m_sp_scanned_index                             == other.m_sp_scanned_index &&
+           m_default_spendable_age                        == other.m_default_spendable_age;
 }
 //-------------------------------------------------------------------------------------------------------------------
 } //namespace sp

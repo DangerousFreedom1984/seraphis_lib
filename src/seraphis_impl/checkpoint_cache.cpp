@@ -33,6 +33,8 @@
 #include "misc_log_ex.h"
 #include "ringct/rctOps.h"
 #include "ringct/rctTypes.h"
+#include "seraphis_impl/serialization_demo_types.h"
+#include "seraphis_impl/serialization_demo_utils.h"
 #include "seraphis_crypto/math_utils.h"
 
 //third party headers
@@ -294,6 +296,29 @@ void CheckpointCache::prune_checkpoints()
         // i. remove the pruned element from our window
         window.erase(window_prune_element);
     }
+}
+//-------------------------------------------------------------------------------------------------------------------
+void CheckpointCache::set_from_serializable(const serialization::ser_CheckpointCache &serializable)
+{
+    m_min_checkpoint_index = serializable.min_checkpoint_index;
+    serialization::recover_checkpoint_cache_config(serializable.config, m_config);
+    m_window_size = serializable.window_size;
+    m_checkpoints = serializable.checkpoints;
+}
+//-------------------------------------------------------------------------------------------------------------------
+bool CheckpointCache::operator==(const CheckpointCache &other)
+{
+    return m_min_checkpoint_index == other.m_min_checkpoint_index &&
+           m_config               == other.m_config &&
+           m_window_size          == other.m_window_size &&
+           m_checkpoints          == other.m_checkpoints;
+}
+//-------------------------------------------------------------------------------------------------------------------
+bool operator==(const CheckpointCacheConfig &a, const CheckpointCacheConfig &b)
+{
+    return a.num_unprunable == b.num_unprunable &&
+           a.max_separation == b.max_separation &&
+           a.density_factor == b.density_factor;
 }
 //-------------------------------------------------------------------------------------------------------------------
 } //namespace sp

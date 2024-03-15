@@ -193,4 +193,8 @@ struct SpEnoteRecordV1 final
     jamtis::JamtisEnoteType type;
 };
 
+bool operator==(const LegacyIntermediateEnoteRecord &a, const LegacyIntermediateEnoteRecord &b);
+bool operator==(const LegacyEnoteRecord &a, const LegacyEnoteRecord &b);
+bool operator==(const SpEnoteRecordV1 &a, const SpEnoteRecordV1 &b);
+
 } //namespace sp

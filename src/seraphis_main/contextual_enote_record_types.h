@@ -277,6 +277,12 @@ struct SpContextualKeyImageSetV1 final
 //////////////////////////////////////////// Free Functions ////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+bool operator==(const SpEnoteOriginContextV1 &a, const SpEnoteOriginContextV1 &b);
+bool operator==(const SpEnoteSpentContextV1 &a, const SpEnoteSpentContextV1 &b);
+bool operator==(const SpContextualEnoteRecordV1 &a, const SpContextualEnoteRecordV1 &b);
+bool operator==(const LegacyContextualIntermediateEnoteRecordV1 &a, const LegacyContextualIntermediateEnoteRecordV1 &b);
+bool operator==(const LegacyContextualEnoteRecordV1 &a, const LegacyContextualEnoteRecordV1 &b);
+
 /// check if a context is older than another (returns false if apparently the same age, or younger)
 bool is_older_than(const SpEnoteOriginContextV1 &context, const SpEnoteOriginContextV1 &other_context);
 bool is_older_than(const SpEnoteSpentContextV1 &context, const SpEnoteSpentContextV1 &other_context);
