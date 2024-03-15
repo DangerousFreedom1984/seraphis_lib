@@ -42,7 +42,6 @@ template <class T> bool read_encrypted_file(std::string path, const crypto::chac
     crypto::chacha20(file.encrypted_data.data(), file.encrypted_data.size(), key, file.iv, &decrypted_data[0]);
 
     binary_archive<false> ar{epee::strspan<std::uint8_t>(decrypted_data)};
-
     if (!::serialization::serialize(ar, struct_out))
         return false;
 
