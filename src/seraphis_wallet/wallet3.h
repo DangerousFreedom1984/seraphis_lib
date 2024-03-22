@@ -36,6 +36,8 @@
 #include "math_helper.h"
 #include "seraphis_impl/enote_store.h"
 #include "seraphis_core/jamtis_support_types.h"
+#include "seraphis_wallet/address_utils.h"
+#include "seraphis_wallet/transaction_history.h"
 #include "wallet/wallet2_basic/wallet2_storage.h"
 
 // mocks - to be deleted
@@ -95,6 +97,11 @@ class wallet3
     bool handle_legacy_keys(const cryptonote::account_base &legacy_keys, const epee::wipeable_string& password);
     bool close_wallet();
 
+    // save/load enote_store and tx_history
+    bool save_enote_and_tx_store(const crypto::chacha_key &key);
+    bool load_enote_and_tx_store(const crypto::chacha_key &key);
+
+
     // wallet tiers
     bool create_view_all(const epee::wipeable_string& password);
     bool create_view_received(const epee::wipeable_string &password);
@@ -153,8 +160,13 @@ class wallet3
 
     // Experimental testing functions
     bool create_money(const std::vector<std::string> &args);
+    bool show_address(const std::vector<std::string> &args);
     bool show_balance(const std::vector<std::string> &args);
     bool transfer(const std::vector<std::string> &args);
+    bool show_enotes_cmd(const std::vector<std::string> &args);
+    bool show_specific_enote_cmd(const std::vector<std::string> &args);
+    bool get_enote_ownership_proof_sender_cmd(const std::vector<std::string> &args);
+    bool check_enote_ownership_proof_cmd(const std::vector<std::string> &args);
 
     /// member variables
 
@@ -171,12 +183,16 @@ class wallet3
     address_index_t m_current_index{make_address_index(0, 0)};
     WalletType m_wallet_type;
     uint64_t m_kdf_rounds;
+    JamtisAddressNetwork m_address_network;
+    JamtisAddressVersion m_address_version;
 
-    // keys and enotes storage
+    // keys, enotes storage and tx_history
     KeyContainer m_key_container;
     SpEnoteStore m_enote_store{0, 0, 0};
+    SpTransactionHistory m_transaction_history;
 
     // ledger context
+    // (TEMPORARY)
     sp::mocks::MockLedgerContext m_ledger_context{0, 10000};
 
     // multithreading and console handler

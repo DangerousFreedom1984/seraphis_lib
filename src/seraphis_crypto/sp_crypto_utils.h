@@ -34,6 +34,7 @@
 #include "crypto/crypto.h"
 #include "crypto/x25519.h"
 #include "ringct/rctTypes.h"
+#include "serialization/serialization.h"
 
 //third party headers
 
@@ -175,3 +176,5 @@ bool balance_check_in_out_amnts(const std::vector<rct::xmr_amount> &input_amount
     const rct::xmr_amount transaction_fee);
 
 } //namespace sp
+
+BLOB_SERIALIZER(sp::sortable_key);

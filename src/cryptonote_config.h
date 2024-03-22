@@ -294,6 +294,9 @@ namespace config
   const constexpr char HASH_KEY_SERAPHIS_ENOTE_KEY_IMAGE_PROOF_MESSAGE_V1[] = "sp_enote_key_image_proof_message_v1";
   const constexpr char HASH_KEY_SERAPHIS_ENOTE_UNSPENT_PROOF_MESSAGE_V1[] = "sp_enote_unspent_proof_message_v1";
 
+  const constexpr char HASH_KEY_SP_WALLET_TX_HISTORY_MESSAGE_V1[] = "sp_wallet_tx_history_message_1";
+  const constexpr char HASH_KEY_SP_WALLET_TX_HISTORY_MESSAGE_V2[] = "sp_wallet_tx_history_message_2";
+
   const constexpr char HASH_KEY_BULLETPROOF_PLUS2_TRANSCRIPT[] = "bpp2_transcript";
   const constexpr char HASH_KEY_BULLETPROOF_PLUS2_TRANSCRIPT_UPDATE[] = "bpp2_tupdate";
   const constexpr char HASH_KEY_MATRIX_PROOF_AGGREGATION_COEFF[] = "matrix_proof_aggregation_coeff";

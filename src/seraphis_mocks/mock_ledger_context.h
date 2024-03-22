@@ -45,6 +45,11 @@
 #include "seraphis_crypto/sp_crypto_utils.h"
 #include "seraphis_main/scan_core_types.h"
 #include "seraphis_main/tx_component_types.h"
+#include "serialization/serialization.h"
+#include "serialization/crypto.h"
+#include "serialization/pair.h"
+#include "serialization/tuple.h"
+#include "seraphis_impl/serialization_demo_types.h"
 
 //third party headers
 
@@ -256,7 +261,10 @@ public:
         scanning::ChunkContext &chunk_context_out,
         scanning::ChunkData &chunk_data_out) const;
 
-private:
+    std::vector<crypto::key_image> get_sp_key_images_from_tx(const rct::key &tx_id) const;
+    std::vector<SpEnoteVariant> get_sp_enotes_out_from_tx(const rct::key &tx_id) const;
+
+public:
     /// first block where a seraphis tx is allowed (this block and all following must have a seraphis coinbase tx)
     std::uint64_t m_first_seraphis_allowed_block;
     /// first block where only seraphis txs are allowed
@@ -346,15 +354,135 @@ private:
     /// map of block info
     std::map<
         std::uint64_t,  // block index
-        std::tuple<
+        std::pair<
             rct::key,       // block ID
             std::uint64_t   // block timestamp
         >
     > m_block_infos;
 };
 
+struct ser_MockLedgerContext
+{
+    /// first block where a seraphis tx is allowed (this block and all following must have a seraphis coinbase tx)
+    std::uint64_t m_first_seraphis_allowed_block;
+    /// first block where only seraphis txs are allowed
+    std::uint64_t m_first_seraphis_only_block;
+
+
+    //// UNCONFIRMED TXs
+
+    /// cryptonote key images (legacy)
+    std::unordered_set<crypto::key_image> m_unconfirmed_legacy_key_images;
+    /// seraphis key images
+    std::unordered_set<crypto::key_image> m_unconfirmed_sp_key_images;
+    /// map of tx key images
+    std::map<
+        sortable_key,     // tx id
+        std::pair<
+            std::vector<crypto::key_image>,  // legacy key images in tx
+            std::vector<crypto::key_image>   // seraphis key images in tx
+        >
+    > m_unconfirmed_tx_key_images;
+    /// map of seraphis tx outputs
+    std::map<
+        sortable_key,     // tx id
+        std::tuple<       // tx output contents
+            rct::key,                     // input context
+            serialization::ser_SpTxSupplementV1,             // tx supplement
+            std::vector<serialization::ser_SpEnoteVariant>   // output enotes
+        >
+    > m_unconfirmed_tx_output_contents;
+
+
+    //// ON-CHAIN BLOCKS & TXs
+
+    /// Cryptonote key images (legacy)
+    std::unordered_set<crypto::key_image> m_legacy_key_images;
+    /// seraphis key images
+    std::unordered_set<crypto::key_image> m_sp_key_images;
+    /// map of tx key images
+    std::map<
+        std::uint64_t,      // block index
+        std::map<
+            sortable_key,   // tx id
+            std::pair<
+                std::vector<crypto::key_image>,  // legacy key images in tx
+                std::vector<crypto::key_image>   // seraphis key images in tx
+            >
+        >
+    > m_blocks_of_tx_key_images;
+    /// legacy enote references {KI, C} (mapped to output index)
+    std::map<std::uint64_t, rct::ctkey> m_legacy_enote_references;
+    /// seraphis squashed enotes (mapped to output index)
+    std::map<std::uint64_t, rct::key> m_sp_squashed_enotes;
+    /// map of accumulated output counts (legacy)
+    std::map<
+        std::uint64_t,  // block index
+        std::uint64_t   // total number of legacy enotes including those in this block
+    > m_accumulated_legacy_output_counts;
+    /// map of accumulated output counts (seraphis)
+    std::map<
+        std::uint64_t,  // block index
+        std::uint64_t   // total number of seraphis enotes including those in this block
+    > m_accumulated_sp_output_counts;
+    /// map of legacy tx outputs
+    std::map<
+        std::uint64_t,        // block index
+        std::map<
+            sortable_key,     // tx id
+            std::tuple<       // tx output contents
+                std::uint64_t,                    // unlock time
+                std::vector<unsigned char>,                          // tx memo
+                std::vector<serialization::ser_LegacyEnoteVariant>   // output enotes
+            >
+        >
+    > m_blocks_of_legacy_tx_output_contents;
+    /// map of seraphis tx outputs
+    std::map<
+        std::uint64_t,        // block index
+        std::map<
+            sortable_key,     // tx id
+            std::tuple<       // tx output contents
+                rct::key,                     // input context
+                serialization::ser_SpTxSupplementV1,             // tx supplement
+                std::vector<serialization::ser_SpEnoteVariant>   // output enotes
+            >
+        >
+    > m_blocks_of_sp_tx_output_contents;
+    /// map of block info
+    std::map<
+        std::uint64_t,  // block index
+        std::pair<
+            rct::key,       // block ID
+            std::uint64_t   // block timestamp
+        >
+    > m_block_infos;
+
+    BEGIN_SERIALIZE()
+    FIELD(m_first_seraphis_allowed_block)
+    FIELD(m_first_seraphis_only_block)
+    FIELD(m_unconfirmed_legacy_key_images)
+    FIELD(m_unconfirmed_sp_key_images)
+    FIELD(m_unconfirmed_tx_key_images)
+    FIELD(m_unconfirmed_tx_output_contents)
+    FIELD(m_legacy_key_images)
+    FIELD(m_sp_key_images)
+    FIELD(m_blocks_of_tx_key_images)
+    FIELD(m_legacy_enote_references)
+    FIELD(m_sp_squashed_enotes)
+    FIELD(m_accumulated_legacy_output_counts)
+    FIELD(m_accumulated_sp_output_counts)
+    FIELD(m_blocks_of_legacy_tx_output_contents)
+    FIELD(m_blocks_of_sp_tx_output_contents)
+    FIELD(m_block_infos)
+    END_SERIALIZE()
+};
+
 bool try_add_tx_to_ledger(const SpTxCoinbaseV1 &tx_to_add, MockLedgerContext &ledger_context_inout);
 bool try_add_tx_to_ledger(const SpTxSquashedV1 &tx_to_add, MockLedgerContext &ledger_context_inout);
+
+void make_serializable_mock_ledger_context(const MockLedgerContext &mock_ledger, ser_MockLedgerContext &serializable_out);
+void recover_mock_ledger_context(const ser_MockLedgerContext &serializable, MockLedgerContext &mock_ledger_out);
 
 } //namespace mocks
 } //namespace sp

@@ -38,15 +38,12 @@
 
 // forward declarations
 
-using namespace sp::jamtis;
-using namespace sp;
-
 enum class JamtisAddressNetwork : char
 {
-    MAINNET   = 'm',
-    TESTNET   = 't',
-    STAGENET  = 's',
     FAKECHAIN = 'f',
+    MAINNET   = 'm',
+    STAGENET  = 's',
+    TESTNET   = 't',
 };
 
 enum class JamtisAddressVersion : char
@@ -54,13 +51,50 @@ enum class JamtisAddressVersion : char
     V1 = '1',
 };
 
-// Given the JamtisDestination, JamtisAddressVersion and JamtisAddressNetwork
-// get the human-readable address format 'xmra...'
-void get_str_from_destination(const JamtisDestinationV1 &dest,
+/**
+* brief: Given the JamtisDestinationV1, JamtisAddressVersion and JamtisAddressNetwork
+         get the human-readable address format 'xmra...'
+* param: dest - JamtisDestinationV1
+* param: address_version -
+* param: address_network -
+* return : string representing an human-readable jamtis address -
+*/
+std::string get_str_from_destination(const sp::jamtis::JamtisDestinationV1 &dest,
+    const JamtisAddressVersion address_version,
+    const JamtisAddressNetwork address_network);
+void get_str_from_destination(const sp::jamtis::JamtisDestinationV1 &dest,
     const JamtisAddressVersion address_version,
     const JamtisAddressNetwork address_network,
-    std::string &address_out);
+    std::string &str_out);
 
-// Given the human-readable address format 'xmra...'
-// get the JamtisDestination
-void get_destination_from_str(const std::string &address, JamtisDestinationV1 &dest_out);
+/**
+* brief: Given the human-readable address format 'xmra...'
+         get the JamtisDestinationV1
+* param: address -
+* return : destination (JamtisDestinationV1)
+*/
+void get_destination_from_str(const std::string &address, sp::jamtis::JamtisDestinationV1 &dest_out, JamtisAddressVersion &version_out, JamtisAddressNetwork &network_out);
+
+// Encode a JamtisDestination into a human-readable string
+// A Jamtis address is represented by the following keys
+// [  K1   ][  K2   ][  K3   ][  addr_tag  ]
+// [  256  ][  255  ][  255  ][  144       ]  -- number of bits
+// Since base32 requires a multiple of 5 number of bits for the best compactness of the generated strings,
+// the idea is to encode the last two bits of addr_tag into the last bits of K2 and K3 (since they have only
+// 255 bits and the last bit of Curve25519 point is always 0).
+
+/**
+* brief: Given a JamtisDestinationV1, return the corresponding base32 encoded string
+         using the algorithm described at the function implementation.
+* param: destination -
+* return : encoded string (std::string)
+*/
+std::string encode_jamtis_readable_address(const sp::jamtis::JamtisDestinationV1 &destination);
+
+/**
+* brief: Given a base32 encoded string, return JamtisDestinationV1 with the correspondent keys
+         using the algorithm described at the function implementation.
+* param: encoded_address-
+* return : jamtis destination (JamtisDestinationV1)
+*/
+sp::jamtis::JamtisDestinationV1 decode_jamtis_readable_address(const std::string &encoded_address);

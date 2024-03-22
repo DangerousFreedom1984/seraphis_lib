@@ -209,8 +209,6 @@ bool KeyContainer::decrypt(const crypto::chacha_key &chacha_key)
 //-------------------------------------------------------------------------------------------------------------------
 void KeyContainer::convert_legacy_keys(const cryptonote::account_base &legacy_keys)
 {
-    m_sp_keys.k_s_legacy = legacy_keys.get_keys().m_spend_secret_key;
-    m_sp_keys.k_v_legacy = legacy_keys.get_keys().m_view_secret_key;
     m_legacy_keys.k_s    = legacy_keys.get_keys().m_spend_secret_key;
     m_legacy_keys.k_v    = legacy_keys.get_keys().m_view_secret_key;
     m_legacy_keys.Ks     = rct::pk2rct(legacy_keys.get_keys().m_account_address.m_spend_public_key);
@@ -227,7 +225,7 @@ void KeyContainer::derive_seraphis_keys_from_legacy()
     make_jamtis_findreceived_key(m_sp_keys.k_vb, m_sp_keys.xk_fr);
     make_jamtis_generateaddress_secret(m_sp_keys.k_vb, m_sp_keys.s_ga);
     make_jamtis_ciphertag_secret(m_sp_keys.s_ga, m_sp_keys.s_ct);
-    make_seraphis_spendkey(m_sp_keys.k_vb, m_sp_keys.k_m, m_sp_keys.K_1_base);
+    sp::make_seraphis_spendkey(m_sp_keys.k_vb, m_sp_keys.k_m, m_sp_keys.K_1_base);
     make_jamtis_unlockamounts_pubkey(m_sp_keys.xk_ua, m_sp_keys.xK_ua);
     make_jamtis_findreceived_pubkey(m_sp_keys.xk_fr, m_sp_keys.xK_ua, m_sp_keys.xK_fr);
 }
@@ -248,8 +246,6 @@ bool KeyContainer::write_master(const std::string &path, const crypto::chacha_ke
     // (the serializable with the decrypted private keys will
     // remain in memory only during the scope of the function)
     ser_JamtisKeys ser_keys = {
-        .k_s_legacy = m_sp_keys.k_s_legacy,
-        .k_v_legacy = m_sp_keys.k_v_legacy,
         .k_m        = m_sp_keys.k_m,
         .k_vb       = m_sp_keys.k_vb,
         .xk_ua      = m_sp_keys.xk_ua,
@@ -275,8 +271,6 @@ bool KeyContainer::write_view_all(const std::string &path, const crypto::chacha_
     // (the serializable with the decrypted private keys will
     // remain in memory only during the scope of the function)
     ser_JamtisKeys view_all{
-        .k_s_legacy = {},
-        .k_v_legacy = m_sp_keys.k_v_legacy,
         .k_m      = {},
         .k_vb     = m_sp_keys.k_vb,
         .xk_ua    = m_sp_keys.xk_ua,
@@ -302,8 +296,6 @@ bool KeyContainer::write_view_received(const std::string &path, const crypto::ch
     // (the serializable with the decrypted private keys will
     // remain in memory only during the scope of the function)
     ser_JamtisKeys view_received{
-        .k_s_legacy = {},
-        .k_v_legacy = m_sp_keys.k_v_legacy,
         .k_m      = {},
         .k_vb     = {},
         .xk_ua    = m_sp_keys.xk_ua,
@@ -329,8 +321,6 @@ bool KeyContainer::write_find_received(const std::string &path, const crypto::ch
     // (the serializable with the decrypted private keys will
     // remain in memory only during the scope of the function)
     ser_JamtisKeys find_received{
-        .k_s_legacy = {},
-        .k_v_legacy = m_sp_keys.k_v_legacy,
         .k_m      = {},
         .k_vb     = {},
         .xk_ua    = {},
@@ -356,8 +346,6 @@ bool KeyContainer::write_address_generator(const std::string &path, const crypto
     // (the serializable with the decrypted private keys will
     // remain in memory only during the scope of the function)
     ser_JamtisKeys address_generator{
-        .k_s_legacy = {},
-        .k_v_legacy = m_sp_keys.k_v_legacy,
         .k_m      = {},
         .k_vb     = {},
         .xk_ua    = {},
@@ -434,8 +422,6 @@ std::string KeyContainer::get_address_zero(const JamtisAddressVersion address_ve
 //-------------------------------------------------------------------------------------------------------------------
 void KeyContainer::make_serializable_jamtis_keys(ser_JamtisKeys &serializable_keys)
 {
-    serializable_keys.k_s_legacy = m_sp_keys.k_s_legacy;
-    serializable_keys.k_v_legacy = m_sp_keys.k_v_legacy;
     serializable_keys.k_m        = m_sp_keys.k_m;
     serializable_keys.k_vb       = m_sp_keys.k_vb;
     serializable_keys.xk_ua      = m_sp_keys.xk_ua;
@@ -449,8 +435,6 @@ void KeyContainer::make_serializable_jamtis_keys(ser_JamtisKeys &serializable_ke
 //-------------------------------------------------------------------------------------------------------------------
 void KeyContainer::recover_jamtis_keys(const ser_JamtisKeys &ser_keys, JamtisKeys &keys_out)
 {
-    keys_out.k_s_legacy = ser_keys.k_s_legacy;
-    keys_out.k_v_legacy = ser_keys.k_v_legacy;
     keys_out.k_m        = ser_keys.k_m;
     keys_out.k_vb       = ser_keys.k_vb;
     keys_out.xk_ua      = ser_keys.xk_ua;
@@ -465,9 +449,7 @@ void KeyContainer::recover_jamtis_keys(const ser_JamtisKeys &ser_keys, JamtisKey
 bool KeyContainer::compare_keys(KeyContainer &other, const crypto::chacha_key &chacha_key)
 {
 
-    bool r = other.m_sp_keys.k_s_legacy == m_sp_keys.k_s_legacy &&
-        other.m_sp_keys.k_v_legacy == m_sp_keys.k_v_legacy &&
-        other.m_sp_keys.k_m == m_sp_keys.k_m && other.m_sp_keys.k_vb == m_sp_keys.k_vb &&
+    bool r = other.m_sp_keys.k_m == m_sp_keys.k_m && other.m_sp_keys.k_vb == m_sp_keys.k_vb &&
         other.m_sp_keys.xk_ua == m_sp_keys.xk_ua && other.m_sp_keys.xk_fr == m_sp_keys.xk_fr &&
         other.m_sp_keys.s_ga == m_sp_keys.s_ga && other.m_sp_keys.s_ct == m_sp_keys.s_ct &&
         other.m_sp_keys.K_1_base == m_sp_keys.K_1_base && other.m_sp_keys.xK_ua == m_sp_keys.xK_ua &&

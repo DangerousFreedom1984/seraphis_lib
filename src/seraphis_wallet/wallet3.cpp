@@ -28,6 +28,8 @@
 
 // paired header
 #include "wallet3.h"
+#include <boost/multiprecision/cpp_int.hpp>
+#include <cstdint>
 
 // local headers
 #include "address_utils.h"
@@ -37,6 +39,7 @@
 #include "common/scoped_message_writer.h"
 #include "console_handler.h"
 #include "crypto/chacha.h"
+#include "crypto/crypto.h"
 #include "cryptonote_basic/account.h"
 #include "key_container.h"
 #include "misc_language.h"
@@ -45,7 +48,16 @@
 #include "ringct/rctTypes.h"
 #include "send_receive.h"
 #include "seraphis_core/binned_reference_set_utils.h"
+#include "seraphis_core/jamtis_enote_utils.h"
 #include "seraphis_impl/enote_store_utils.h"
+#include "seraphis_impl/serialization_demo_utils.h"
+#include "seraphis_main/contextual_enote_record_types.h"
+#include "seraphis_mocks/mock_ledger_context.h"
+#include "seraphis_wallet/encrypted_file.h"
+#include "seraphis_wallet/serialization_types.h"
+#include "seraphis_wallet/show_enotes.h"
+#include "seraphis_wallet/sp_knowledge_proofs.h"
+#include "seraphis_wallet/transaction_history.h"
 #include "string_tools.h"
 #include "wallet/wallet2_basic/wallet2_storage.h"
 
@@ -111,16 +123,21 @@ using namespace sp::jamtis;
 #define SCOPED_WALLET_UNLOCK() SCOPED_WALLET_UNLOCK_ON_BAD_PASSWORD(return true;)
 
 // #define REFRESH_PERIOD 90                   // seconds
-#define DEFAULT_INACTIVITY_LOCK_TIMEOUT 90  // seconds
+#define DEFAULT_INACTIVITY_LOCK_TIMEOUT 0  // seconds
 
-#define PRINT_USAGE(usage_help) fail_msg_writer() << boost::format(tr("usage: %s")) % usage_help;
+#define PRINT_USAGE(usage_help) tools::fail_msg_writer() << boost::format(tr("usage: %s")) % usage_help;
 
-const char *USAGE_SHOW_BALANCE("balance [detail]");
+const char *USAGE_SHOW_ADDRESS("address");
+const char *USAGE_SHOW_BALANCE("balance");
 const char *USAGE_SHOW_TRANSFER("transfer <address> <amount>");
 const char *USAGE_SHOW_VIEWALL("save_viewall");
 const char *USAGE_SHOW_VIEWRECEIVED("save_viewreceived");
 const char *USAGE_SHOW_FINDRECEIVED("save_findreceived");
 const char *USAGE_SHOW_ADDRGEN("save_addrgen");
+const char *USAGE_SHOW_ENOTES("show_enotes [in/out/pool/pending/failed/all] between [height1] and [height2]");
+const char *USAGE_SHOW_SPECIFIC_ENOTE("show_specific_enote [key_image]");
+const char *USAGE_GET_ENOTE_OWNERSHIP_PROOF_SENDER("get_enote_ownership_proof_sender [tx_id] [onetime_address]");
+const char *USAGE_CHECK_ENOTE_OWNERSHIP_PROOF("check_enote_ownership_proof [tx_id] [onetime_address]");
 
 int main(int argc, char *argv[])
 {
@@ -149,7 +166,9 @@ wallet3::wallet3() :
     m_inactivity_lock_timeout(DEFAULT_INACTIVITY_LOCK_TIMEOUT),
     m_enote_store({0, 0, 0}),
     m_kdf_rounds(1),
-    m_ledger_context({0, 10000})
+    m_ledger_context({0, 10000}),
+    m_address_network(JamtisAddressNetwork::MAINNET),
+    m_address_version(JamtisAddressVersion::V1)
 {
     // 1. set commands
     m_cmd_binder.set_handler(
@@ -178,6 +197,26 @@ wallet3::wallet3() :
         boost::bind(&wallet3::on_command, this, &wallet3::show_balance, _1),
         tr(USAGE_SHOW_BALANCE),
         tr("Show the wallet's balance of the currently selected account."));
+    m_cmd_binder.set_handler("address",
+        boost::bind(&wallet3::on_command, this, &wallet3::show_address, _1),
+        tr(USAGE_SHOW_ADDRESS),
+        tr("Show the wallet's current address."));
+    m_cmd_binder.set_handler("show_enotes",
+        boost::bind(&wallet3::on_command, this, &wallet3::show_enotes_cmd, _1),
+        tr(USAGE_SHOW_ENOTES),
+        tr("Show wallet's enotes spent or unspent."));
+    m_cmd_binder.set_handler("show_specific_enote",
+        boost::bind(&wallet3::on_command, this, &wallet3::show_specific_enote_cmd, _1),
+        tr(USAGE_SHOW_SPECIFIC_ENOTE),
+        tr("Show detailed info of a specific enote."));
+    m_cmd_binder.set_handler("get_enote_ownership_proof_sender",
+        boost::bind(&wallet3::on_command, this, &wallet3::get_enote_ownership_proof_sender_cmd, _1),
+        tr(USAGE_GET_ENOTE_OWNERSHIP_PROOF_SENDER),
+        tr("Make enote ownership proof from sender."));
+    m_cmd_binder.set_handler("check_enote_ownership_proof_sender",
+        boost::bind(&wallet3::on_command, this, &wallet3::check_enote_ownership_proof_cmd, _1),
+        tr(USAGE_CHECK_ENOTE_OWNERSHIP_PROOF),
+        tr("Check enote ownership proof."));
     m_cmd_binder.set_handler("create_money",
         boost::bind(&wallet3::on_command, this, &wallet3::create_money, _1),
         tr("Create fake enotes for wallets."));
@@ -221,7 +260,14 @@ void wallet3::stop()
     // 1. terminates console handling thread
     m_cmd_binder.stop_handling();
 
-    // 2. terminates idle thread
+    // 2.save enote_store
+    // TODO: remove dependency on password here
+    auto pw = default_password_prompter(false);
+    crypto::chacha_key chacha_key;
+    crypto::generate_chacha_key(pw->password().data(),pw->password().length(), chacha_key, m_kdf_rounds);
+    save_enote_and_tx_store(chacha_key);
+
+    // 3. terminates idle thread
     close_wallet();
 }
 //----------------------------------------------------------------------------------------------------
@@ -238,6 +284,20 @@ bool wallet3::create_or_open_wallet()
     {
         if (!ask_wallet_name(wallet_path, keys_file_exists, wallet_file_exists))
             continue;
+
+        // load MockLedger
+        // (TEMPORARY)
+        crypto::chacha_key key;
+        crypto::generate_chacha_key("mockledger_password", key, m_kdf_rounds);
+        bool exist_ledger;
+        exist_ledger = boost::filesystem::exists("mockledger");
+        if (exist_ledger)
+        {
+            mocks::ser_MockLedgerContext ser_mock_ledger;
+            read_encrypted_file("mockledger", key, ser_mock_ledger);
+            mocks::recover_mock_ledger_context(ser_mock_ledger, m_ledger_context);
+        }
+
         // 3. if wallet keys exist
         if (keys_file_exists)
             try_to_load_wallet(wallet_name_valid);
@@ -367,6 +427,11 @@ bool wallet3::load_keys_and_cache_from_file_sp(const epee::wipeable_string &pass
 
     // TODO
     // 3. load wallet cache file
+    bool exist_cache;
+    exist_cache = boost::filesystem::exists(m_wallet_file + ".spdata");
+    if (exist_cache)
+        load_enote_and_tx_store(chacha_key);
+
     return true;
 }
 //----------------------------------------------------------------------------------------------------
@@ -377,10 +442,14 @@ bool wallet3::create_new_wallet(const epee::wipeable_string &password)
     crypto::generate_chacha_key(password.data(), password.length(), chacha_key, m_kdf_rounds);
 
     // 2. generate new keys considering a master wallet
+    // CHANGE WITH INITIAL WALLET SETTINGS
+    m_address_network = JamtisAddressNetwork::MAINNET;
+    m_address_version = JamtisAddressVersion::V1;
+
     m_key_container.generate_keys();
     if (m_key_container.write_master(m_keys_file, chacha_key))
     {
-        m_current_address = m_key_container.get_address_zero(JamtisAddressVersion::V1, JamtisAddressNetwork::MAINNET);
+        m_current_address = m_key_container.get_address_zero(m_address_version, m_address_network);
         tools::msg_writer() << "Wallet generated: " + m_current_address;
     }
     else
@@ -569,6 +638,47 @@ bool wallet3::close_wallet()
     return true;
 }
 //----------------------------------------------------------------------------------------------------
+bool wallet3::save_enote_and_tx_store(const crypto::chacha_key &key)
+{
+    // serialize enote_store
+    sp::serialization::ser_SpEnoteStore ser_enote_store;
+    make_serializable_sp_enote_store(m_enote_store, ser_enote_store);
+
+    ser_SpTransactionStoreV1 ser_tx_store;
+    make_serializable_sp_transaction_store_v1(m_transaction_history.get_tx_store(), ser_tx_store);
+
+    ser_SpWalletData ser_wallet_data{ser_enote_store,ser_tx_store};
+
+    write_encrypted_file(m_wallet_file+".spdata", key, ser_wallet_data);
+
+    // save MockLedger
+    // (TEMPORARY)
+    crypto::chacha_key key_ledger;
+    crypto::generate_chacha_key("mockledger_password", key_ledger, m_kdf_rounds);
+    mocks::ser_MockLedgerContext ser_mock_ledger;
+    mocks::make_serializable_mock_ledger_context(m_ledger_context, ser_mock_ledger);
+    write_encrypted_file("mockledger", key_ledger, ser_mock_ledger);
+
+    return true;
+}
+//----------------------------------------------------------------------------------------------------
+bool wallet3::load_enote_and_tx_store(const crypto::chacha_key &key)
+{
+
+    ser_SpWalletData ser_wallet_data;
+
+    read_encrypted_file(m_wallet_file+".spdata", key, ser_wallet_data);
+
+    SpTransactionStore tx_store_recovered;
+    recover_sp_transaction_store_v1(ser_wallet_data.transaction_store, tx_store_recovered);
+    recover_sp_enote_store(ser_wallet_data.enote_store, m_enote_store);
+
+    m_transaction_history.set_tx_store(tx_store_recovered);
+
+
+    return true;
+}
+//----------------------------------------------------------------------------------------------------
 void wallet3::get_current_address(const epee::wipeable_string &password)
 {
     crypto::chacha_key chacha_key;
@@ -576,7 +686,7 @@ void wallet3::get_current_address(const epee::wipeable_string &password)
 
     m_key_container.decrypt(chacha_key);
 
-    m_current_address = m_key_container.get_address_zero(JamtisAddressVersion::V1, JamtisAddressNetwork::MAINNET);
+    m_current_address = m_key_container.get_address_zero(m_address_version, m_address_network);
 
     print_wallet_type();
 
@@ -976,11 +1086,18 @@ bool wallet3::help(const std::vector<std::string> &args)
     {
         message_writer() << "";
         message_writer() << tr("Important commands:");
-        message_writer() << tr("\"help <command>\" - Show a command's documentation.");
+        // message_writer() << tr("\"help <command>\" - Show a command's documentation.");
         message_writer() << tr("\"save_viewall\" - Save view-all wallet.");
         message_writer() << tr("\"save_viewreceived\" - Save view-received wallet.");
         message_writer() << tr("\"save_findreceived\" - Save find-received wallet.");
         message_writer() << tr("\"save_addrgen\" - Save address-generator wallet.");
+        message_writer() << tr("\"balance\" - Show available funds.");
+        message_writer() << tr("\"address\" - Show current wallet address.");
+        message_writer() << tr("\"transfer <address> <amount>\" - Create a transaction and broadcast to the network.");
+        message_writer() << tr("\"show_enotes [in|out|pool|pending|failed|all] between [height1] and [height2] \" - Show a list of enotes.");
+        message_writer() << tr("\"show_specific_enote [key_image]\" - Show the detailed info of an enote.");
+        message_writer() << tr("\"get_enote_ownership_proof_sender [tx_id] [onetime_address]\" - Get enote ownership proof from sender.");
+        message_writer() << tr("\"check_enote_ownership_proof [tx_id] [onetime_address]\" - Check enote ownership proof.");
         message_writer() << "";
     }
     return true;
@@ -1083,6 +1200,9 @@ bool wallet3::create_money(const std::vector<std::string> &args)
     std::vector<std::string> local_args = args;
 
     JamtisDestinationV1 destination_address;
+    JamtisAddressNetwork destination_network{};
+    JamtisAddressVersion destination_version{};
+
     if (local_args.size() == 0)
     {
         // JamtisDestinationV1 destination_address_random;
@@ -1090,13 +1210,13 @@ bool wallet3::create_money(const std::vector<std::string> &args)
     }
     else
     {
-        get_destination_from_str(local_args[0], destination_address);
+        get_destination_from_str(local_args[0], destination_address, destination_version, destination_network);
     }
 
     const scanning::ScanMachineConfig refresh_config{
         .reorg_avoidance_increment = 1, .max_chunk_size_hint = 1, .max_partialscan_attempts = 0};
 
-    send_sp_coinbase_amounts_to_user({1000, 1000, 1000, 1000, 1000}, destination_address, m_ledger_context);
+    send_sp_coinbase_amounts_to_user({1000, 1000, 1000, 1000, 1000}, destination_address, destination_version, destination_network ,m_ledger_context);
 
     refresh_user_enote_store(m_key_container.get_sp_keys(), refresh_config, m_ledger_context, m_enote_store);
 
@@ -1105,19 +1225,28 @@ bool wallet3::create_money(const std::vector<std::string> &args)
     return true;
 }
 //----------------------------------------------------------------------------------------------------
+bool wallet3::show_address(const std::vector<std::string> &args)
+{
+    tools::msg_writer() << tr("Wallet address: ");
+    tools::msg_writer() << m_current_address << std::endl;
+
+    return true;
+}
+//----------------------------------------------------------------------------------------------------
 bool wallet3::show_balance(const std::vector<std::string> &args)
 {
-
     SCOPED_WALLET_UNLOCK();
 
     const scanning::ScanMachineConfig refresh_config{
-        .reorg_avoidance_increment = 1, .max_chunk_size_hint = 1, .max_partialscan_attempts = 0};
+        .reorg_avoidance_increment = 0, .max_chunk_size_hint = 1, .max_partialscan_attempts = 0};
 
     refresh_user_enote_store(m_key_container.get_sp_keys(), refresh_config, m_ledger_context, m_enote_store);
 
-    auto balance = get_balance(m_enote_store, {SpEnoteOriginStatus::ONCHAIN}, {SpEnoteSpentStatus::SPENT_ONCHAIN});
-    tools::msg_writer() << tr("Wallet balance: ");
-    tools::msg_writer() << boost::format(tr("%15s")) % balance;
+    // get_balance should get UNSPENT instead??
+    boost::multiprecision::uint128_t balance = get_balance(m_enote_store, {SpEnoteOriginStatus::ONCHAIN}, {SpEnoteSpentStatus::SPENT_ONCHAIN});
+    set_console_color(epee::console_color_green, true);
+    std::cout << "Wallet balance: " << balance << std::endl;
+    epee::reset_console_color();
 
     return true;
 }
@@ -1128,15 +1257,17 @@ bool wallet3::transfer(const std::vector<std::string> &args)
     std::vector<std::string> local_args = args;
 
     JamtisDestinationV1 destination_address;
+    JamtisAddressNetwork destination_network;
+    JamtisAddressVersion destination_version;
     if (local_args.size() != 2)
     {
-        tools::fail_msg_writer() << tr("Invalid number of arguments");
+        PRINT_USAGE(USAGE_SHOW_TRANSFER);
         return true;
     }
 
     SCOPED_WALLET_UNLOCK();
 
-    get_destination_from_str(local_args[0], destination_address);
+    get_destination_from_str(local_args[0], destination_address, destination_version, destination_network);
     rct::xmr_amount amount{std::stoull(local_args[1])};
 
     // Data for transfer
@@ -1170,19 +1301,24 @@ bool wallet3::transfer(const std::vector<std::string> &args)
         static_cast<std::size_t>(compute_bin_width(bin_config.bin_radius)), 0);
 
     SpTxSquashedV1 single_tx;
+    std::vector<JamtisPaymentProposalV1> normal_payments;
+    std::vector<JamtisPaymentProposalSelfSendV1> selfsend_payments;
+
     construct_tx_for_mock_ledger_v1(m_key_container.get_legacy_keys(),
         m_key_container.get_sp_keys(),
         input_selector,
         fee_calculator,
         fee_per_tx_weight,
         max_inputs,
-        {{amount, destination_address, TxExtra{}}},
+        {{amount, TxExtra{}, destination_address, destination_version, destination_network}},
         legacy_ring_size,
         ref_set_decomp_n,
         ref_set_decomp_m,
         bin_config,
         m_ledger_context,
-        single_tx);
+        single_tx,
+        selfsend_payments,
+        normal_payments);
 
     // validate and submit to the mock ledger
     const sp::mocks::TxValidationContextMock tx_validation_context{m_ledger_context};
@@ -1193,6 +1329,9 @@ bool wallet3::transfer(const std::vector<std::string> &args)
 
     refresh_user_enote_store(m_key_container.get_sp_keys(), refresh_config, m_ledger_context, m_enote_store);
 
+    // add tx to tx_history
+    m_transaction_history.add_single_tx(single_tx, selfsend_payments, normal_payments);
+
     rct::key tx_id;
     get_sp_tx_squashed_v1_txid(single_tx, tx_id);
 
@@ -1200,7 +1339,192 @@ bool wallet3::transfer(const std::vector<std::string> &args)
 
     return true;
 }
+//----------------------------------------------------------------------------------------------------
+bool wallet3::show_enotes_cmd(const std::vector<std::string> &args)
+{
+    SCOPED_WALLET_UNLOCK();
+    const scanning::ScanMachineConfig refresh_config{
+        .reorg_avoidance_increment = 1, .max_chunk_size_hint = 10, .max_partialscan_attempts = 10};
+    refresh_user_enote_store(m_key_container.get_sp_keys(), refresh_config, m_ledger_context, m_enote_store);
 
+    std::vector<std::string> local_args = args;
+    std::string tx_direction = "all";
+    uint64_t initial_height = 0, final_height = -1;
+
+    if (local_args.size() > 3)
+    {
+        PRINT_USAGE(USAGE_SHOW_ENOTES);
+        return true;
+    }
+
+    if (local_args.size() >= 1)
+    {
+        tx_direction = local_args[0];
+        if (local_args.size() >= 2)
+        {
+            initial_height = std::stoul(local_args[1]);
+            if (local_args.size() == 3)
+            {
+                final_height = std::stoul(local_args[2]);
+            }
+        }
+    }
+
+    std::vector<ContextualRecordVariant> enote_records;
+
+    if (tx_direction == "in")
+    {
+        get_enotes(m_enote_store, SpTxDirectionStatus::IN_ONCHAIN, {initial_height, final_height}, enote_records);
+        show_enotes(enote_records);
+    }
+    else if (tx_direction == "out")
+    {
+        get_enotes(m_enote_store, SpTxDirectionStatus::OUT_ONCHAIN, {initial_height, final_height}, enote_records);
+        show_enotes(enote_records);
+    }
+    else if (tx_direction == "pending")
+    {
+        get_enotes(m_enote_store, SpTxDirectionStatus::IN_OFFCHAIN, {initial_height, final_height}, enote_records);
+        get_enotes(m_enote_store, SpTxDirectionStatus::OUT_OFFCHAIN, {initial_height, final_height}, enote_records);
+        show_enotes(enote_records);
+    }
+    else if (tx_direction == "pool")
+    {
+        get_enotes(m_enote_store, SpTxDirectionStatus::IN_POOL, {initial_height, final_height}, enote_records);
+        get_enotes(m_enote_store, SpTxDirectionStatus::OUT_POOL, {initial_height, final_height}, enote_records);
+        show_enotes(enote_records);
+    }
+    else if (tx_direction == "failed")
+    {
+        get_enotes(m_enote_store, SpTxDirectionStatus::FAILED, {initial_height, final_height}, enote_records);
+        show_enotes(enote_records);
+    }
+    else if (tx_direction == "all")
+    {
+        get_enotes(m_enote_store, SpTxDirectionStatus::ALL, {initial_height, final_height}, enote_records);
+        show_enotes(enote_records);
+    }
+    else
+        tools::fail_msg_writer() << "Wrong option. See show_enotes usage.";
+
+    return true;
+
+}
+//----------------------------------------------------------------------------------------------------
+bool wallet3::show_specific_enote_cmd(const std::vector<std::string> &args)
+{
+    std::vector<std::string> local_args = args;
+    crypto::key_image key_image;
+
+    if (local_args.size() == 1)
+        epee::string_tools::hex_to_pod(local_args[0], key_image);
+    else
+    {
+        PRINT_USAGE(USAGE_SHOW_SPECIFIC_ENOTE);
+        return true;
+    }
+
+    show_specific_enote(m_enote_store, m_transaction_history, key_image);
+
+    return true;
+}
+//----------------------------------------------------------------------------------------------------
+bool wallet3::get_enote_ownership_proof_sender_cmd(const std::vector<std::string> &args)
+{
+    SCOPED_WALLET_UNLOCK();
+
+    std::vector<std::string> local_args = args;
+    rct::key tx_id;
+    rct::key onetime_address;
+
+    if ((local_args.size() > 2) || (local_args.size() == 0))
+    {
+        PRINT_USAGE(USAGE_GET_ENOTE_OWNERSHIP_PROOF_SENDER);
+        return true;
+    }
+
+    if (local_args.size() > 0)
+    {
+        epee::string_tools::hex_to_pod(local_args[0], tx_id);
+        if (local_args.size() == 2)
+        {
+            epee::string_tools::hex_to_pod(local_args[1], onetime_address);
+        }
+    }
+
+    TransactionRecord tx_record;
+    CHECK_AND_ASSERT_THROW_MES(m_transaction_history.try_get_tx_record_from_txid(tx_id, tx_record),
+        "Error in kp_get_enote_ownership_proof: Transaction not found.");
+
+    // 7. From tx_id get all output enotes of a tx by querying node.
+    std::vector<SpEnoteVariant> out_enotes = m_ledger_context.get_sp_enotes_out_from_tx(tx_id);
+
+    // 8. get input context
+    rct::key input_context;
+    make_jamtis_input_context_standard(tx_record.legacy_spent_enotes, tx_record.sp_spent_enotes, input_context);
+
+    // 9. try to match enotes with destinations
+    std::vector<EnoteInfo> vec_enote_out_info;
+    CHECK_AND_ASSERT_THROW_MES(try_get_enote_out_info(out_enotes,
+                                   tx_record.normal_payments,
+                                   tx_record.selfsend_payments,
+                                   input_context,
+                                   m_key_container.get_sp_keys().k_vb,
+                                   vec_enote_out_info),
+        "Error in get_enote_out_info. Could not match onetime adresses with destinations.");
+
+    EnoteInfo specific_enote_info{};
+    get_specific_enote_out_info(vec_enote_out_info, onetime_address, specific_enote_info);
+
+    // 10. make enote sent proof for normal and selfsend enotes
+    boost::optional<std::string> filename{"tx_enote_ownership_proof"};
+    boost::optional<std::string> str_proof;
+    str_proof = get_enote_ownership_proof_sender(tx_id,
+        m_key_container.get_sp_keys().k_vb,
+        specific_enote_info,
+        m_transaction_history,
+        filename);
+
+    tools::success_msg_writer() << "Enote ownership proof sender generated." << std::endl;
+    return true;
+}
+//----------------------------------------------------------------------------------------------------
+bool wallet3::check_enote_ownership_proof_cmd(const std::vector<std::string> &args)
+{
+    std::vector<std::string> local_args = args;
+    rct::key tx_id;
+    boost::optional<std::string> filename{"tx_enote_ownership_proof"};
+    boost::optional<std::string> str_proof;
+    rct::key expected_amount_commitment, expected_onetime_address;
+
+    if ((local_args.size() > 2) || (local_args.size() == 0))
+    {
+        PRINT_USAGE(USAGE_CHECK_ENOTE_OWNERSHIP_PROOF);
+        return true;
+    }
+
+    if (local_args.size() > 0)
+    {
+        epee::string_tools::hex_to_pod(local_args[0], tx_id);
+        if (local_args.size() == 2)
+        {
+            epee::string_tools::hex_to_pod(local_args[1], expected_onetime_address);
+        }
+    }
+
+    // 7. From tx_id get all output enotes of a tx by querying node.
+    std::vector<SpEnoteVariant> vec_enotes = m_ledger_context.get_sp_enotes_out_from_tx(tx_id);
+
+    // get amount commitment
+    get_amount_commitment_from_tx_id(vec_enotes, expected_onetime_address, expected_amount_commitment);
+
+    if(read_enote_ownership_proof(filename, str_proof, expected_amount_commitment ,expected_onetime_address))
+        tools::success_msg_writer() << "Enote ownership proof is valid." << std::endl;
+    else
+        tools::fail_msg_writer() << "Enote ownership proof is not valid." << std::endl;
+
+    return true;
+}
 //----------------------------------------------------------------------------------------------------
 // Keys locker
 //----------------------------------------------------------------------------------------------------
@@ -1255,6 +1579,5 @@ wallet_keys_unlocker::~wallet_keys_unlocker()
     catch (...)
     {
         MERROR("Failed to re-encrypt wallet keys");
-        // do not propagate through dtor, we'd crash
     }
 }

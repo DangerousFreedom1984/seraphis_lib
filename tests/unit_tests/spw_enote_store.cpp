@@ -7,6 +7,7 @@
 #include "seraphis_impl/enote_store_utils.h"
 #include "seraphis_impl/serialization_demo_types.h"
 #include "seraphis_impl/serialization_demo_utils.h"
+#include "seraphis_wallet/address_utils.h"
 #include "seraphis_wallet/key_container.h"
 #include "seraphis_wallet/send_receive.h"
 #include "unit_tests_utils.h"
@@ -18,10 +19,13 @@
 #include "seraphis_mocks/tx_validation_context_mock.h"
 
 using namespace seraphis_wallet;
+using namespace sp;
 
 static void create_tx(KeyContainer &key_container, SpEnoteStore &enote_store, mocks::MockLedgerContext &ledger_context)
 {
     JamtisDestinationV1 destination_address;
+    JamtisAddressNetwork destination_network{JamtisAddressNetwork::MAINNET};
+    JamtisAddressVersion destination_version{JamtisAddressVersion::V1};
     key_container.get_random_destination(destination_address);
 
     rct::xmr_amount amount{500};
@@ -29,7 +33,7 @@ static void create_tx(KeyContainer &key_container, SpEnoteStore &enote_store, mo
     const scanning::ScanMachineConfig refresh_config{
         .reorg_avoidance_increment = 1, .max_chunk_size_hint = 1, .max_partialscan_attempts = 0};
 
-    send_sp_coinbase_amounts_to_user({1000, 1000, 1000, 1000, 1000}, destination_address, ledger_context);
+    send_sp_coinbase_amounts_to_user({1000, 1000, 1000, 1000, 1000}, destination_address, destination_version, destination_network,ledger_context);
 
     refresh_user_enote_store(key_container.get_sp_keys(), refresh_config, ledger_context, enote_store);
     auto balance = get_balance(enote_store, {SpEnoteOriginStatus::ONCHAIN}, {SpEnoteSpentStatus::SPENT_ONCHAIN});
@@ -53,19 +57,23 @@ static void create_tx(KeyContainer &key_container, SpEnoteStore &enote_store, mo
         static_cast<std::size_t>(compute_bin_width(bin_config.bin_radius)), 0);
 
     SpTxSquashedV1 single_tx;
+    std::vector<JamtisPaymentProposalV1> normal_payments;
+    std::vector<JamtisPaymentProposalSelfSendV1> selfsend_payments;
     construct_tx_for_mock_ledger_v1(key_container.get_legacy_keys(),
         key_container.get_sp_keys(),
         input_selector,
         fee_calculator,
         fee_per_tx_weight,
         max_inputs,
-        {{amount, destination_address, TxExtra{}}},
+        {{amount, TxExtra{}, destination_address, destination_version, destination_network}},
         legacy_ring_size,
         ref_set_decomp_n,
         ref_set_decomp_m,
         bin_config,
         ledger_context,
-        single_tx);
+        single_tx,
+        selfsend_payments,
+        normal_payments);
 
     // validate and submit to the mock ledger
     const sp::mocks::TxValidationContextMock tx_validation_context{ledger_context};

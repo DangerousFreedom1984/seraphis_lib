@@ -54,8 +54,6 @@ namespace jamtis
 //-------------------------------------------------------------------------------------------------------------------
 void make_jamtis_keys(JamtisKeys &keys_out)
 {
-    keys_out.k_s_legacy = rct::rct2sk(rct::zero());
-    keys_out.k_v_legacy = rct::rct2sk(rct::zero());
     keys_out.k_m        = rct::rct2sk(rct::skGen());
     keys_out.k_vb       = rct::rct2sk(rct::skGen());
     make_jamtis_unlockamounts_key(keys_out.k_vb, keys_out.xk_ua);
@@ -86,8 +84,6 @@ void make_destination_zero(const JamtisKeys &user_keys, JamtisDestinationV1 &use
 //-------------------------------------------------------------------------------------------------------------------
 void JamtisKeys::encrypt(const crypto::chacha_key &key, const crypto::chacha_iv &iv)
 {
-    crypto::chacha20(k_s_legacy.data, sizeof(k_s_legacy), key, iv, k_s_legacy.data);
-    crypto::chacha20(k_v_legacy.data, sizeof(k_v_legacy), key, iv, k_v_legacy.data);
     crypto::chacha20(k_m.data, sizeof(k_m), key, iv, k_m.data);
     crypto::chacha20(k_vb.data, sizeof(k_vb), key, iv, k_vb.data);
     crypto::chacha20(xk_ua.data, sizeof(xk_ua), key, iv, (char *)xk_ua.data);

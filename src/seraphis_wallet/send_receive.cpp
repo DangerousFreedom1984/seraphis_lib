@@ -54,6 +54,7 @@
 #include "seraphis_mocks/mock_ledger_context.h"
 #include "seraphis_mocks/tx_validation_context_mock.h"
 
+#include "seraphis_wallet/address_utils.h"
 #include "seraphis_wallet/jamtis_keys.h"
 
 //third party headers
@@ -72,20 +73,26 @@ namespace sp
 {
 //-------------------------------------------------------------------------------------------------------------------
 void convert_outlay_to_payment_proposal(const rct::xmr_amount outlay_amount,
-    const jamtis::JamtisDestinationV1 &destination,
     const TxExtra &partial_memo_for_destination,
+    const jamtis::JamtisDestinationV1 &destination,
+    const JamtisAddressVersion address_version,
+    const JamtisAddressNetwork address_network,
     jamtis::JamtisPaymentProposalV1 &payment_proposal_out)
 {
     payment_proposal_out = jamtis::JamtisPaymentProposalV1{
             .destination             = destination,
             .amount                  = outlay_amount,
             .enote_ephemeral_privkey = crypto::x25519_secret_key_gen(),
-            .partial_memo            = partial_memo_for_destination
+            .partial_memo            = partial_memo_for_destination,
+            .address_version         = address_version,
+            .address_network         = address_network
         };
 }
 //-------------------------------------------------------------------------------------------------------------------
 void send_sp_coinbase_amounts_to_user(const std::vector<rct::xmr_amount> &coinbase_amounts,
     const jamtis::JamtisDestinationV1 &user_address,
+    const JamtisAddressVersion address_version,
+    const JamtisAddressNetwork address_network,
     mocks::MockLedgerContext &ledger_context_inout)
 {
     // 1. prepare payment proposals
@@ -97,8 +104,10 @@ void send_sp_coinbase_amounts_to_user(const std::vector<rct::xmr_amount> &coinba
     {
         // a. make payment proposal
         convert_outlay_to_payment_proposal(coinbase_amount,
-        user_address,
         TxExtra{},
+        user_address,
+        address_version,
+        address_network,
         tools::add_element(payment_proposals));
 
         // b. accumulate the block reward
@@ -129,13 +138,15 @@ void construct_tx_for_mock_ledger_v1(const jamtis::LegacyKeys &local_user_legacy
     const FeeCalculator &tx_fee_calculator,
     const rct::xmr_amount fee_per_tx_weight,
     const std::size_t max_inputs,
-    const std::vector<std::tuple<rct::xmr_amount, jamtis::JamtisDestinationV1, TxExtra>> &outlays,
+    const std::vector<std::tuple<rct::xmr_amount, TxExtra, jamtis::JamtisDestinationV1, JamtisAddressVersion, JamtisAddressNetwork>> &outlays,
     const std::size_t legacy_ring_size,
     const std::size_t ref_set_decomp_n,
     const std::size_t ref_set_decomp_m,
     const SpBinnedReferenceSetConfigV1 &bin_config,
     const mocks::MockLedgerContext &ledger_context,
-    SpTxSquashedV1 &tx_out)
+    SpTxSquashedV1 &tx_out,
+    std::vector<jamtis::JamtisPaymentProposalSelfSendV1> &selfsend_payments_out,
+    std::vector<jamtis::JamtisPaymentProposalV1> &normal_payments_out)
 {
     /// build transaction
 
@@ -152,10 +163,14 @@ void construct_tx_for_mock_ledger_v1(const jamtis::LegacyKeys &local_user_legacy
     for (const auto &outlay : outlays)
     {
         convert_outlay_to_payment_proposal(std::get<rct::xmr_amount>(outlay),
-            std::get<jamtis::JamtisDestinationV1>(outlay),
             std::get<TxExtra>(outlay),
+            std::get<jamtis::JamtisDestinationV1>(outlay),
+            std::get<JamtisAddressVersion>(outlay),
+            std::get<JamtisAddressNetwork>(outlay),
             tools::add_element(normal_payment_proposals));
     }
+
+    normal_payments_out = normal_payment_proposals;
 
     // 3. prepare inputs and finalize outputs
     std::vector<LegacyContextualEnoteRecordV1> legacy_contextual_inputs;
@@ -177,6 +192,8 @@ void construct_tx_for_mock_ledger_v1(const jamtis::LegacyKeys &local_user_legacy
             selfsend_payment_proposals,
             discretized_transaction_fee),
         "construct tx for mock ledger (v1): preparing inputs and outputs failed.");
+
+    selfsend_payments_out = selfsend_payment_proposals;
 
     // 4. tx proposal
     SpTxProposalV1 tx_proposal;

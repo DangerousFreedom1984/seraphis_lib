@@ -33,6 +33,10 @@ set(seraphis_wallet_sources
     jamtis_keys.cpp
     key_container.cpp
     send_receive.cpp
+    serialization_types.cpp
+    show_enotes.cpp
+    sp_knowledge_proofs.cpp
+    transaction_history.cpp
     wallet3.cpp)
 
 set(wallet3_sources

@@ -42,12 +42,17 @@
 #include "seraphis_core/jamtis_enote_utils.h"
 #include "seraphis_core/legacy_enote_types.h"
 #include "seraphis_core/sp_core_enote_utils.h"
+#include "seraphis_core/tx_extra.h"
 #include "seraphis_crypto/sp_crypto_utils.h"
+#include "seraphis_impl/serialization_demo_types.h"
+#include "seraphis_impl/serialization_demo_utils.h"
 #include "seraphis_main/scan_balance_recovery_utils.h"
 #include "seraphis_main/scan_core_types.h"
 #include "seraphis_main/tx_component_types.h"
 #include "seraphis_main/txtype_coinbase_v1.h"
 #include "seraphis_main/txtype_squashed_v1.h"
+#include "serialization/pair.h"
+#include "serialization/tuple.h"
 
 //third party headers
 #include <boost/thread/locks.hpp>
@@ -55,6 +60,8 @@
 
 //standard headers
 #include <algorithm>
+#include <cstdint>
+#include <tuple>
 #include <type_traits>
 #include <vector>
 
@@ -245,8 +252,10 @@ std::uint64_t MockLedgerContext::add_legacy_coinbase(const rct::key &tx_id,
     if (new_index >= m_first_seraphis_allowed_block)
         m_blocks_of_sp_tx_output_contents[new_index];
 
-    // 3. add block info (random block ID and zero timestamp in mockup)
-    m_block_infos[new_index] = {rct::pkGen(), 0};
+    // 3. add block info (random block ID and current timestamp in mockup)
+    std::time_t timestamp = std::time(nullptr);
+    std::asctime(std::localtime(&timestamp));
+    m_block_infos[new_index] = {rct::pkGen(), timestamp};
 
     // 4. clear unconfirmed cache
     this->clear_unconfirmed_cache();
@@ -456,8 +465,10 @@ std::uint64_t MockLedgerContext::commit_unconfirmed_txs_v1(const rct::key &coinb
     if (new_index < m_first_seraphis_only_block)
         m_blocks_of_legacy_tx_output_contents[new_index];
 
-    // 3. add block info (random block ID and zero timestamp in mockup)
-    m_block_infos[new_index] = {rct::pkGen(), 0};
+    // 3. add block info (random block ID and current timestamp in mockup)
+    std::time_t timestamp = std::time(nullptr);
+    std::asctime(std::localtime(&timestamp));
+    m_block_infos[new_index] = {rct::pkGen(), timestamp};
 
     // 4. clear unconfirmed chache
     this->clear_unconfirmed_cache();
@@ -1020,6 +1031,33 @@ void MockLedgerContext::get_onchain_chunk_sp(const std::uint64_t chunk_start_ind
         );
 }
 //-------------------------------------------------------------------------------------------------------------------
+std::vector<crypto::key_image> MockLedgerContext::get_sp_key_images_from_tx(const rct::key &tx_id) const
+{
+    std::vector<crypto::key_image> sp_key_images{};
+    for (auto blocks : m_blocks_of_tx_key_images)
+    {
+        if (blocks.second.find(tx_id) != blocks.second.end())
+        {
+            sp_key_images = blocks.second[tx_id].second;
+        }
+    }
+    return sp_key_images;
+}
+//-------------------------------------------------------------------------------------------------------------------
+std::vector<SpEnoteVariant> MockLedgerContext::get_sp_enotes_out_from_tx(const rct::key &tx_id) const
+{
+    std::vector<SpEnoteVariant> sp_enotes{};
+    for (auto blocks : m_blocks_of_sp_tx_output_contents)
+    {
+        if (blocks.second.find(tx_id) != blocks.second.end())
+        {
+            sp_enotes = std::get<2>(blocks.second[tx_id]);
+        }
+    }
+    return sp_enotes;
+}
+
+//-------------------------------------------------------------------------------------------------------------------
 
 //-------------------------------------------------------------------------------------------------------------------
 // free functions
@@ -1040,6 +1078,151 @@ bool try_add_tx_to_ledger(const SpTxSquashedV1 &tx_to_add, MockLedgerContext &le
         std::vector<SpEnoteVariant>{});
 
     return true;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void make_serializable_mock_ledger_context(const MockLedgerContext &mock_ledger, ser_MockLedgerContext &serializable_out)
+{
+    serializable_out.m_first_seraphis_allowed_block  = mock_ledger.m_first_seraphis_allowed_block;
+    serializable_out.m_first_seraphis_only_block     = mock_ledger.m_first_seraphis_only_block;
+    serializable_out.m_unconfirmed_legacy_key_images = mock_ledger.m_unconfirmed_legacy_key_images;
+    serializable_out.m_unconfirmed_sp_key_images     = mock_ledger.m_unconfirmed_sp_key_images;
+    serializable_out.m_unconfirmed_tx_key_images     = mock_ledger.m_unconfirmed_tx_key_images;
+    // serializable_out.m_unconfirmed_tx_output_contents   = mock_ledger.m_unconfirmed_tx_output_contents;
+    serializable_out.m_legacy_key_images                   = mock_ledger.m_legacy_key_images;
+    serializable_out.m_sp_key_images                       = mock_ledger.m_sp_key_images;
+    serializable_out.m_blocks_of_tx_key_images             = mock_ledger.m_blocks_of_tx_key_images;
+    serializable_out.m_legacy_enote_references             = mock_ledger.m_legacy_enote_references;
+    serializable_out.m_sp_squashed_enotes                  = mock_ledger.m_sp_squashed_enotes;
+    serializable_out.m_accumulated_legacy_output_counts    = mock_ledger.m_accumulated_legacy_output_counts;
+    serializable_out.m_accumulated_sp_output_counts        = mock_ledger.m_accumulated_sp_output_counts;
+    serializable_out.m_block_infos = mock_ledger.m_block_infos;
+
+    for (auto const &it1 : mock_ledger.m_unconfirmed_tx_output_contents)
+    {
+        std::tuple<rct::key, serialization::ser_SpTxSupplementV1, std::vector<serialization::ser_SpEnoteVariant>> info;
+        serialization::ser_SpTxSupplementV1 ser_tx_supplement;
+        std::vector<serialization::ser_SpEnoteVariant> vec_enotes;
+        serialization::make_serializable_sp_tx_supplement_v1(std::get<1>(it1.second), ser_tx_supplement);
+        serialization::ser_SpEnoteVariant ser_enote_variant;
+        for (auto const &v : std::get<2>(it1.second))
+        {
+            serialization::make_serializable_sp_enote_variant(v, ser_enote_variant);
+            vec_enotes.emplace_back(ser_enote_variant);
+        }
+        info = make_tuple(std::get<0>(it1.second), ser_tx_supplement, vec_enotes);
+
+        serializable_out.m_unconfirmed_tx_output_contents[it1.first] = info;
+    }
+
+    for (auto const& it1 : mock_ledger.m_blocks_of_legacy_tx_output_contents)
+    {
+        for (auto const& it2 : it1.second)
+        {
+            std::tuple<uint64_t,std::vector<unsigned char>,std::vector<serialization::ser_LegacyEnoteVariant>> info;
+            std::vector<unsigned char> ser_tx_extra;
+            std::vector<serialization::ser_LegacyEnoteVariant> vec_enotes;
+            ser_tx_extra = std::get<1>(it2.second);
+            serialization::ser_LegacyEnoteVariant ser_enote_variant;
+            for (auto const& v : std::get<2>(it2.second))
+            {
+                serialization::make_serializable_legacy_enote_variant(v, ser_enote_variant);
+                vec_enotes.emplace_back(ser_enote_variant);
+            }
+            info = make_tuple(std::get<0>(it2.second),ser_tx_extra,vec_enotes);
+            serializable_out.m_blocks_of_legacy_tx_output_contents[it1.first][it2.first] = info;
+        }
+    }
+
+    for (auto const& it1 : mock_ledger.m_blocks_of_sp_tx_output_contents)
+    {
+        for (auto const& it2 : it1.second)
+        {
+            std::tuple<rct::key,serialization::ser_SpTxSupplementV1,std::vector<serialization::ser_SpEnoteVariant>> info;
+            serialization::ser_SpTxSupplementV1 ser_tx_supplement;
+            std::vector<serialization::ser_SpEnoteVariant> vec_enotes;
+            serialization::make_serializable_sp_tx_supplement_v1(std::get<1>(it2.second), ser_tx_supplement);
+            serialization::ser_SpEnoteVariant ser_enote_variant;
+            for (auto const& v : std::get<2>(it2.second))
+            {
+                serialization::make_serializable_sp_enote_variant(v, ser_enote_variant);
+                vec_enotes.emplace_back(ser_enote_variant);
+            }
+            info = make_tuple(std::get<0>(it2.second),ser_tx_supplement,vec_enotes);
+            serializable_out.m_blocks_of_sp_tx_output_contents[it1.first][it2.first] = info;
+        }
+    }
+}
+//-------------------------------------------------------------------------------------------------------------------
+void recover_mock_ledger_context(const ser_MockLedgerContext &serializable, MockLedgerContext &mock_ledger_out)
+{
+    mock_ledger_out.m_first_seraphis_allowed_block  = serializable.m_first_seraphis_allowed_block;
+    mock_ledger_out.m_first_seraphis_only_block     = serializable.m_first_seraphis_only_block;
+    mock_ledger_out.m_unconfirmed_legacy_key_images = serializable.m_unconfirmed_legacy_key_images;
+    mock_ledger_out.m_unconfirmed_sp_key_images     = serializable.m_unconfirmed_sp_key_images;
+    mock_ledger_out.m_unconfirmed_tx_key_images     = serializable.m_unconfirmed_tx_key_images;
+    mock_ledger_out.m_legacy_key_images                   = serializable.m_legacy_key_images;
+    mock_ledger_out.m_sp_key_images                       = serializable.m_sp_key_images;
+    mock_ledger_out.m_blocks_of_tx_key_images             = serializable.m_blocks_of_tx_key_images;
+    mock_ledger_out.m_legacy_enote_references             = serializable.m_legacy_enote_references;
+    mock_ledger_out.m_sp_squashed_enotes                  = serializable.m_sp_squashed_enotes;
+    mock_ledger_out.m_accumulated_legacy_output_counts    = serializable.m_accumulated_legacy_output_counts;
+    mock_ledger_out.m_accumulated_sp_output_counts        = serializable.m_accumulated_sp_output_counts;
+    mock_ledger_out.m_block_infos = serializable.m_block_infos;
+
+    for (auto it1 : serializable.m_unconfirmed_tx_output_contents)
+    {
+        std::tuple<rct::key, SpTxSupplementV1, std::vector<SpEnoteVariant>> info;
+        SpTxSupplementV1 tx_supplement;
+        std::vector<SpEnoteVariant> vec_enotes;
+        serialization::recover_sp_tx_supplement_v1(std::get<1>(it1.second), tx_supplement);
+        SpEnoteVariant enote_variant;
+        for (auto const &v : std::get<2>(it1.second))
+        {
+            serialization::recover_sp_enote_variant(v, enote_variant);
+            vec_enotes.emplace_back(enote_variant);
+        }
+        info = make_tuple(std::get<0>(it1.second), tx_supplement, vec_enotes);
+
+        mock_ledger_out.m_unconfirmed_tx_output_contents[it1.first] = info;
+    }
+
+    for (auto const& it1 : serializable.m_blocks_of_legacy_tx_output_contents)
+    {
+        for (auto it2 : it1.second)
+        {
+            std::tuple<uint64_t,TxExtra,std::vector<LegacyEnoteVariant>> info;
+            TxExtra tx_extra;
+            std::vector<LegacyEnoteVariant> vec_enotes;
+            tx_extra = std::get<1>(it2.second);
+            LegacyEnoteVariant enote_variant;
+            for (auto const& v : std::get<2>(it2.second))
+            {
+                serialization::recover_legacy_enote_variant(v, enote_variant);
+                vec_enotes.emplace_back(enote_variant);
+            }
+            info = make_tuple(std::get<0>(it2.second),tx_extra,vec_enotes);
+            mock_ledger_out.m_blocks_of_legacy_tx_output_contents[it1.first][it2.first] = info;
+        }
+    }
+
+    for (auto const& it1 : serializable.m_blocks_of_sp_tx_output_contents)
+    {
+        for (auto it2 : it1.second)
+        {
+            std::tuple<rct::key,SpTxSupplementV1,std::vector<SpEnoteVariant>> info;
+            SpTxSupplementV1 tx_supplement;
+            std::vector<SpEnoteVariant> vec_enotes;
+            serialization::recover_sp_tx_supplement_v1(std::get<1>(it2.second), tx_supplement);
+            SpEnoteVariant enote_variant;
+            for (auto const& v : std::get<2>(it2.second))
+            {
+                serialization::recover_sp_enote_variant(v, enote_variant);
+                vec_enotes.emplace_back(enote_variant);
+            }
+            info = make_tuple(std::get<0>(it2.second),tx_supplement,vec_enotes);
+            mock_ledger_out.m_blocks_of_sp_tx_output_contents[it1.first][it2.first] = info;
+        }
+    }
 }
 //-------------------------------------------------------------------------------------------------------------------
 } //namespace mocks

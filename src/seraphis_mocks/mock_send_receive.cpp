@@ -86,7 +86,7 @@ void convert_outlay_to_payment_proposal(const rct::xmr_amount outlay_amount,
             .destination             = destination,
             .amount                  = outlay_amount,
             .enote_ephemeral_privkey = crypto::x25519_secret_key_gen(),
-            .partial_memo            = partial_memo_for_destination
+            .partial_memo            = partial_memo_for_destination,
         };
 }
 //-------------------------------------------------------------------------------------------------------------------

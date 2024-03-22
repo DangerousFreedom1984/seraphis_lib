@@ -38,6 +38,7 @@
 #include "jamtis_destination.h"
 #include "jamtis_support_types.h"
 #include "ringct/rctTypes.h"
+#include "seraphis_wallet/address_utils.h"
 #include "sp_core_types.h"
 #include "tx_extra.h"
 
@@ -61,6 +62,7 @@ struct JamtisPaymentProposalV1 final
 {
     /// user address
     JamtisDestinationV1 destination;
+
     /// b
     rct::xmr_amount amount;
 
@@ -69,6 +71,12 @@ struct JamtisPaymentProposalV1 final
 
     /// memo elements to add to the tx memo
     TxExtra partial_memo;
+
+    /// address version
+    JamtisAddressVersion address_version{JamtisAddressVersion::V1};
+
+    /// address network
+    JamtisAddressNetwork address_network{JamtisAddressNetwork::FAKECHAIN};
 };
 
 ////
@@ -89,6 +97,12 @@ struct JamtisPaymentProposalSelfSendV1 final
 
     /// memo elements to add to the tx memo
     TxExtra partial_memo;
+
+    /// address version
+    JamtisAddressVersion address_version{JamtisAddressVersion::V1};
+
+    /// address network
+    JamtisAddressNetwork address_network{JamtisAddressNetwork::FAKECHAIN};
 };
 
 /// equality operators

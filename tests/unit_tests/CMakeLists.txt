@@ -98,8 +98,11 @@ set(unit_tests_sources
   seraphis_tx.cpp
   sha256.cpp
   slow_memmem.cpp
-  spw_key_container.cpp
   spw_enote_store.cpp
+  spw_key_container.cpp
+  spw_show_enotes.cpp
+  spw_sp_knowledge_proofs.cpp
+  spw_tx_history.cpp
   subaddress.cpp
   tasking_system_demo.cpp
   test_tx_utils.cpp

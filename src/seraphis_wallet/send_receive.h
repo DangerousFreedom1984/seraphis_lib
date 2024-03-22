@@ -28,8 +28,6 @@
 
 // NOT FOR PRODUCTION
 
-// Seraphis tx-builder/component-builder mockups (tx inputs).
-
 #pragma once
 
 //local headers
@@ -60,15 +58,16 @@ namespace sp
 
 /// make a payment proposal
 void convert_outlay_to_payment_proposal(const rct::xmr_amount outlay_amount,
-    const jamtis::JamtisDestinationV1 &destination,
     const TxExtra &partial_memo_for_destination,
+    const jamtis::JamtisDestinationV1 &destination,
+    const JamtisAddressVersion address_version,
+    const JamtisAddressNetwork address_network,
     jamtis::JamtisPaymentProposalV1 &payment_proposal_out);
 /// send funds as coinbase enotes
 void send_sp_coinbase_amounts_to_user(const std::vector<rct::xmr_amount> &coinbase_amounts,
     const jamtis::JamtisDestinationV1 &user_address,
-    mocks::MockLedgerContext &ledger_context_inout);
-void send_sp_coinbase_amounts_to_users(const std::vector<std::vector<rct::xmr_amount>> &coinbase_amounts_per_user,
-    const std::vector<jamtis::JamtisDestinationV1> &user_addresses,
+    const JamtisAddressVersion address_version,
+    const JamtisAddressNetwork address_network,
     mocks::MockLedgerContext &ledger_context_inout);
 /// create a seraphis transaction
 void construct_tx_for_mock_ledger_v1(const jamtis::LegacyKeys &local_user_legacy_keys,
@@ -77,13 +76,15 @@ void construct_tx_for_mock_ledger_v1(const jamtis::LegacyKeys &local_user_legacy
     const FeeCalculator &tx_fee_calculator,
     const rct::xmr_amount fee_per_tx_weight,
     const std::size_t max_inputs,
-    const std::vector<std::tuple<rct::xmr_amount, jamtis::JamtisDestinationV1, TxExtra>> &outlays,
+    const std::vector<std::tuple<rct::xmr_amount, TxExtra, jamtis::JamtisDestinationV1, JamtisAddressVersion, JamtisAddressNetwork>> &outlays,
     const std::size_t legacy_ring_size,
     const std::size_t ref_set_decomp_n,
     const std::size_t ref_set_decomp_m,
     const SpBinnedReferenceSetConfigV1 &bin_config,
     const mocks::MockLedgerContext &ledger_context,
-    SpTxSquashedV1 &tx_out);
+    SpTxSquashedV1 &tx_out,
+    std::vector<jamtis::JamtisPaymentProposalSelfSendV1> &selfsend_payments_out,
+    std::vector<jamtis::JamtisPaymentProposalV1> &normal_payments_out);
 /// create transactions and submit them to a mock ledger
 void refresh_user_enote_store(const jamtis::JamtisKeys &user_keys,
     const scanning::ScanMachineConfig &refresh_config,
