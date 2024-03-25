@@ -388,7 +388,7 @@ TEST(seraphis_wallet_knowledge_proofs, enote_ownership_proof_receiver)
     {
         SpEnoteRecordV1 enote_record = all_enote_records[0].record;
 
-        str_proof = get_enote_ownership_proof_receiver(enote_record, user_keys_A.K_1_base, user_keys_A.k_vb, filename);
+        str_proof = get_enote_ownership_proof_receiver(enote_record, user_keys_A.K_1_base, user_keys_A.k_vb,all_enote_records[0].origin_context.transaction_id, filename);
 
         // read enote ownership proof
         CHECK_AND_ASSERT_THROW_MES(read_enote_ownership_proof(filename,

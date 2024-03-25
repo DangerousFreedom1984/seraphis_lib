@@ -150,12 +150,14 @@ struct ser_EnoteOwnershipProofV1
     rct::key q;
     rct::key C;
     rct::key Ko;
+    rct::key tx_id;
 
     BEGIN_SERIALIZE_OBJECT()
     FIELD(K_1)
     FIELD(q)
     FIELD(C)
     FIELD(Ko)
+    FIELD(tx_id)
     END_SERIALIZE()
 };
 

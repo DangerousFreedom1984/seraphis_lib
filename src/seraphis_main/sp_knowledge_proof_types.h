@@ -101,6 +101,7 @@ struct EnoteOwnershipProofV1
     rct::key q;
     rct::key C;
     rct::key Ko;
+    rct::key tx_id;
 }; 
 
 ////

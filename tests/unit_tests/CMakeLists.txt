@@ -100,6 +100,7 @@ set(unit_tests_sources
   slow_memmem.cpp
   spw_enote_store.cpp
   spw_key_container.cpp
+  spw_mock_ledger.cpp
   spw_show_enotes.cpp
   spw_sp_knowledge_proofs.cpp
   spw_tx_history.cpp

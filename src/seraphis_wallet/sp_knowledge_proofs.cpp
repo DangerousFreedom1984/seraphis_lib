@@ -281,6 +281,8 @@ bool try_make_enote_ownership_proof_sender(const rct::key txid,
         }
     }
 
+    proof.tx_id = txid;
+
     // Check if proof is not empty
     if (!(proof.Ko == onetime_address_ref(enote_info.enote)))
         return false;
@@ -301,6 +303,8 @@ std::string get_enote_ownership_proof_sender(const rct::key txid,
         "get_enote_ownership_proof_sender: failed to make enote ownership proof "
         "sender.");
 
+    proof.tx_id = txid;
+
     // 2. serialize struct
     ser_EnoteOwnershipProofV1 ser_enote_ownership_proof{};
     make_serializable_enote_ownership_proof_v1(proof, ser_enote_ownership_proof);
@@ -317,11 +321,13 @@ std::string get_enote_ownership_proof_sender(const rct::key txid,
 std::string get_enote_ownership_proof_receiver(const SpEnoteRecordV1 &enote_record,
     const rct::key &jamtis_spend_pubkey,
     const crypto::secret_key &k_vb,
+    const rct::key txid,
     const boost::optional<std::string> filename)
 {
     // 1. make proof
     EnoteOwnershipProofV1 proof;
     make_enote_ownership_proof_v1_receiver(enote_record, jamtis_spend_pubkey, k_vb, proof);
+    proof.tx_id = txid;
 
     // 2. serialize struct
     ser_EnoteOwnershipProofV1 ser_enote_ownership_proof{};

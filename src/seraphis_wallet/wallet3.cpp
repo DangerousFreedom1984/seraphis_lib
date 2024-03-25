@@ -52,6 +52,7 @@
 #include "seraphis_impl/enote_store_utils.h"
 #include "seraphis_impl/serialization_demo_utils.h"
 #include "seraphis_main/contextual_enote_record_types.h"
+#include "seraphis_main/sp_knowledge_proof_utils.h"
 #include "seraphis_mocks/mock_ledger_context.h"
 #include "seraphis_wallet/encrypted_file.h"
 #include "seraphis_wallet/serialization_types.h"
@@ -137,7 +138,8 @@ const char *USAGE_SHOW_ADDRGEN("save_addrgen");
 const char *USAGE_SHOW_ENOTES("show_enotes [in/out/pool/pending/failed/all] between [height1] and [height2]");
 const char *USAGE_SHOW_SPECIFIC_ENOTE("show_specific_enote [key_image]");
 const char *USAGE_GET_ENOTE_OWNERSHIP_PROOF_SENDER("get_enote_ownership_proof_sender [tx_id] [onetime_address]");
-const char *USAGE_CHECK_ENOTE_OWNERSHIP_PROOF("check_enote_ownership_proof [tx_id] [onetime_address]");
+const char *USAGE_GET_ENOTE_OWNERSHIP_PROOF_RECEIVER("get_enote_ownership_proof_receiver [key_image]");
+const char *USAGE_CHECK_ENOTE_OWNERSHIP_PROOF("check_enote_ownership_proof [filename]");
 
 int main(int argc, char *argv[])
 {
@@ -166,7 +168,6 @@ wallet3::wallet3() :
     m_inactivity_lock_timeout(DEFAULT_INACTIVITY_LOCK_TIMEOUT),
     m_enote_store({0, 0, 0}),
     m_kdf_rounds(1),
-    m_ledger_context({0, 10000}),
     m_address_network(JamtisAddressNetwork::MAINNET),
     m_address_version(JamtisAddressVersion::V1)
 {
@@ -213,13 +214,20 @@ wallet3::wallet3() :
         boost::bind(&wallet3::on_command, this, &wallet3::get_enote_ownership_proof_sender_cmd, _1),
         tr(USAGE_GET_ENOTE_OWNERSHIP_PROOF_SENDER),
         tr("Make enote ownership proof from sender."));
-    m_cmd_binder.set_handler("check_enote_ownership_proof_sender",
+    m_cmd_binder.set_handler("get_enote_ownership_proof_receiver",
+        boost::bind(&wallet3::on_command, this, &wallet3::get_enote_ownership_proof_receiver_cmd, _1),
+        tr(USAGE_GET_ENOTE_OWNERSHIP_PROOF_RECEIVER),
+        tr("Make enote ownership proof from sender."));
+    m_cmd_binder.set_handler("check_enote_ownership_proof",
         boost::bind(&wallet3::on_command, this, &wallet3::check_enote_ownership_proof_cmd, _1),
         tr(USAGE_CHECK_ENOTE_OWNERSHIP_PROOF),
         tr("Check enote ownership proof."));
-    m_cmd_binder.set_handler("create_money",
-        boost::bind(&wallet3::on_command, this, &wallet3::create_money, _1),
-        tr("Create fake enotes for wallets."));
+    m_cmd_binder.set_handler("create_money_sp",
+        boost::bind(&wallet3::on_command, this, &wallet3::create_money_sp, _1),
+        tr("Create sp enotes for wallets."));
+    // m_cmd_binder.set_handler("create_money_legacy",
+    //     boost::bind(&wallet3::on_command, this, &wallet3::create_money_legacy, _1),
+    //     tr("Create legacy enotes for wallets."));
 
     // 2. set unknow command
     m_cmd_binder.set_unknown_command_handler(boost::bind(&wallet3::on_command, this, &wallet3::on_unknown_command, _1));
@@ -474,8 +482,8 @@ bool wallet3::create_view_all(const epee::wipeable_string &password)
     m_key_container.decrypt(chacha_key);
 
     // 2. check if appropriate tier to create wallet
-    WalletType type = m_key_container.get_wallet_type();
-    if (type != WalletType::Master)
+    seraphis_wallet::WalletType type = m_key_container.get_wallet_type();
+    if (type != seraphis_wallet::WalletType::Master)
     {
         tools::fail_msg_writer() << "Only Master wallets can generate ViewAll wallets.";
         m_key_container.encrypt(chacha_key);
@@ -507,8 +515,8 @@ bool wallet3::create_view_received(const epee::wipeable_string &password)
     m_key_container.decrypt(chacha_key);
 
     // 2. check if appropriate tier to create wallet
-    WalletType type = m_key_container.get_wallet_type();
-    if (type != WalletType::Master && type != WalletType::ViewAll)
+    seraphis_wallet::WalletType type = m_key_container.get_wallet_type();
+    if (type != seraphis_wallet::WalletType::Master && type != seraphis_wallet::WalletType::ViewAll)
     {
         tools::fail_msg_writer() << "Only Master and ViewAll wallets can generate ViewReceived wallets.";
         m_key_container.encrypt(chacha_key);
@@ -540,8 +548,8 @@ bool wallet3::create_find_received(const epee::wipeable_string &password)
     m_key_container.decrypt(chacha_key);
 
     // 2. check if appropriate tier to create wallet
-    WalletType type = m_key_container.get_wallet_type();
-    if (type != WalletType::Master && type != WalletType::ViewAll)
+    seraphis_wallet::WalletType type = m_key_container.get_wallet_type();
+    if (type != seraphis_wallet::WalletType::Master && type != seraphis_wallet::WalletType::ViewAll)
     {
         tools::fail_msg_writer() << "Only Master and ViewAll wallets can generate FindReceived wallets.";
         m_key_container.encrypt(chacha_key);
@@ -573,8 +581,8 @@ bool wallet3::create_address_generator(const epee::wipeable_string &password)
     m_key_container.decrypt(chacha_key);
 
     // 2. check if appropriate tier to create wallet
-    WalletType type = m_key_container.get_wallet_type();
-    if (type != WalletType::Master && type != WalletType::ViewAll)
+    seraphis_wallet::WalletType type = m_key_container.get_wallet_type();
+    if (type != seraphis_wallet::WalletType::Master && type != seraphis_wallet::WalletType::ViewAll)
     {
         tools::fail_msg_writer() << "Only Master and ViewAll wallets can generate AddrrGen wallets.";
         m_key_container.encrypt(chacha_key);
@@ -640,15 +648,18 @@ bool wallet3::close_wallet()
 //----------------------------------------------------------------------------------------------------
 bool wallet3::save_enote_and_tx_store(const crypto::chacha_key &key)
 {
-    // serialize enote_store
+    // 1. serialize enote_store
     sp::serialization::ser_SpEnoteStore ser_enote_store;
     make_serializable_sp_enote_store(m_enote_store, ser_enote_store);
 
+    // 2. serialize tx_store
     ser_SpTransactionStoreV1 ser_tx_store;
     make_serializable_sp_transaction_store_v1(m_transaction_history.get_tx_store(), ser_tx_store);
 
+    // 3. wrap them
     ser_SpWalletData ser_wallet_data{ser_enote_store,ser_tx_store};
 
+    // 4. write into file
     write_encrypted_file(m_wallet_file+".spdata", key, ser_wallet_data);
 
     // save MockLedger
@@ -664,17 +675,15 @@ bool wallet3::save_enote_and_tx_store(const crypto::chacha_key &key)
 //----------------------------------------------------------------------------------------------------
 bool wallet3::load_enote_and_tx_store(const crypto::chacha_key &key)
 {
-
+    // 1. read serialized data
     ser_SpWalletData ser_wallet_data;
-
     read_encrypted_file(m_wallet_file+".spdata", key, ser_wallet_data);
 
+    // 2. restore into wallet struct member
     SpTransactionStore tx_store_recovered;
     recover_sp_transaction_store_v1(ser_wallet_data.transaction_store, tx_store_recovered);
     recover_sp_enote_store(ser_wallet_data.enote_store, m_enote_store);
-
     m_transaction_history.set_tx_store(tx_store_recovered);
-
 
     return true;
 }
@@ -683,13 +692,9 @@ void wallet3::get_current_address(const epee::wipeable_string &password)
 {
     crypto::chacha_key chacha_key;
     crypto::generate_chacha_key(password.data(), password.length(), chacha_key, m_kdf_rounds);
-
     m_key_container.decrypt(chacha_key);
-
     m_current_address = m_key_container.get_address_zero(m_address_version, m_address_network);
-
     print_wallet_type();
-
     m_key_container.encrypt(chacha_key);
 }
 //----------------------------------------------------------------------------------------------------
@@ -767,19 +772,19 @@ void wallet3::print_wallet_type()
 {
     switch (m_key_container.get_wallet_type())
     {
-        case WalletType::Master:
+        case seraphis_wallet::WalletType::Master:
             tools::msg_writer() << tr("Master wallet loaded.");
             break;
-        case WalletType::ViewAll:
+        case seraphis_wallet::WalletType::ViewAll:
             tools::msg_writer() << tr("View-all wallet loaded.");
             break;
-        case WalletType::ViewReceived:
+        case seraphis_wallet::WalletType::ViewReceived:
             tools::msg_writer() << tr("View-received wallet loaded.");
             break;
-        case WalletType::FindReceived:
+        case seraphis_wallet::WalletType::FindReceived:
             tools::msg_writer() << tr("Find-received wallet loaded.");
             break;
-        case WalletType::AddrGen:
+        case seraphis_wallet::WalletType::AddrGen:
             tools::msg_writer() << tr("Address-generator wallet loaded.");
             break;
         default:
@@ -1087,6 +1092,7 @@ bool wallet3::help(const std::vector<std::string> &args)
         message_writer() << "";
         message_writer() << tr("Important commands:");
         // message_writer() << tr("\"help <command>\" - Show a command's documentation.");
+        message_writer() << tr("\"create_money_sp\" - Create 5 seraphis enotes of 1000 xmr each into mockledger.");
         message_writer() << tr("\"save_viewall\" - Save view-all wallet.");
         message_writer() << tr("\"save_viewreceived\" - Save view-received wallet.");
         message_writer() << tr("\"save_findreceived\" - Save find-received wallet.");
@@ -1097,7 +1103,8 @@ bool wallet3::help(const std::vector<std::string> &args)
         message_writer() << tr("\"show_enotes [in|out|pool|pending|failed|all] between [height1] and [height2] \" - Show a list of enotes.");
         message_writer() << tr("\"show_specific_enote [key_image]\" - Show the detailed info of an enote.");
         message_writer() << tr("\"get_enote_ownership_proof_sender [tx_id] [onetime_address]\" - Get enote ownership proof from sender.");
-        message_writer() << tr("\"check_enote_ownership_proof [tx_id] [onetime_address]\" - Check enote ownership proof.");
+        message_writer() << tr("\"get_enote_ownership_proof_receiver [key_image]\" - Get enote ownership proof from receiver.");
+        message_writer() << tr("\"check_enote_ownership_proof [filename]]\" - Check enote ownership proof.");
         message_writer() << "";
     }
     return true;
@@ -1193,42 +1200,96 @@ bool wallet3::save_addrgen(const std::vector<std::string> &args)
 //----------------------------------------------------------------------------------------------------
 // Experimental testing functions
 //----------------------------------------------------------------------------------------------------
-bool wallet3::create_money(const std::vector<std::string> &args)
+bool wallet3::create_money_sp(const std::vector<std::string> &args)
 {
     SCOPED_WALLET_UNLOCK();
 
     std::vector<std::string> local_args = args;
-
     JamtisDestinationV1 destination_address;
     JamtisAddressNetwork destination_network{};
     JamtisAddressVersion destination_version{};
 
     if (local_args.size() == 0)
-    {
-        // JamtisDestinationV1 destination_address_random;
         m_key_container.get_random_destination(destination_address);
-    }
     else
-    {
         get_destination_from_str(local_args[0], destination_address, destination_version, destination_network);
-    }
 
     const scanning::ScanMachineConfig refresh_config{
-        .reorg_avoidance_increment = 1, .max_chunk_size_hint = 1, .max_partialscan_attempts = 0};
-
+        .reorg_avoidance_increment = 1, .max_chunk_size_hint = 1, .max_partialscan_attempts = 1};
     send_sp_coinbase_amounts_to_user({1000, 1000, 1000, 1000, 1000}, destination_address, destination_version, destination_network ,m_ledger_context);
-
     refresh_user_enote_store(m_key_container.get_sp_keys(), refresh_config, m_ledger_context, m_enote_store);
-
     tools::success_msg_writer() << tr("Five enotes of 1000 each were created to this wallet.");
-
     return true;
 }
 //----------------------------------------------------------------------------------------------------
+// bool wallet3::create_money_legacy(const std::vector<std::string> &args)
+// {
+//     SCOPED_WALLET_UNLOCK();
+
+//     if (m_key_container.get_legacy_keys().k_s == rct2sk(rct::zero()))
+//     {
+//         tools::fail_msg_writer() << "Legacy enotes can only be generated to legacy derived wallets." << std::endl;
+//         return true;
+//     }
+
+//     try
+//     {
+//         std::vector<std::string> local_args = args;
+
+//         const scanning::ScanMachineConfig refresh_config{
+//             .reorg_avoidance_increment = 1000, .max_chunk_size_hint = 1000, .max_partialscan_attempts = 100};
+
+//         // b. add enough fake legacy enotes to the ledger so we can reliably make legacy ring signatures
+//         std::vector<rct::xmr_amount> fake_legacy_enote_amounts(16, 0);
+//         const rct::key fake_legacy_spendkey{rct::pkGen()};
+//         const rct::key fake_legacy_viewkey{rct::pkGen()};
+
+//         send_legacy_coinbase_amounts_to_user(
+//             fake_legacy_enote_amounts, fake_legacy_spendkey, fake_legacy_viewkey, m_ledger_context);
+
+//         rct::key legacy_subaddr_spendkey;
+//         rct::key legacy_subaddr_viewkey;
+//         cryptonote::subaddress_index legacy_subaddr_index;
+//         std::unordered_map<rct::key, cryptonote::subaddress_index> legacy_subaddress_map;
+
+//         gen_legacy_subaddress(m_key_container.get_legacy_keys().Ks,
+//             m_key_container.get_legacy_keys().k_v,
+//             legacy_subaddr_spendkey,
+//             legacy_subaddr_viewkey,
+//             legacy_subaddr_index);
+
+//         legacy_subaddress_map[legacy_subaddr_spendkey] = legacy_subaddr_index;
+
+//         send_legacy_coinbase_amounts_to_user({1000}, legacy_subaddr_spendkey, legacy_subaddr_viewkey, m_ledger_context);
+
+//         refresh_user_enote_store_legacy_full(m_key_container.get_legacy_keys().Ks,
+//             legacy_subaddress_map,
+//             m_key_container.get_legacy_keys().k_s,
+//             m_key_container.get_legacy_keys().k_v,
+//             refresh_config,
+//             m_ledger_context,
+//             m_enote_store);
+
+//         tools::success_msg_writer() << tr("Five legacy enotes of 1000 each were created to this wallet.");
+//     }
+//     catch (...)
+//     {
+//     }
+
+//     return true;
+// }
+//----------------------------------------------------------------------------------------------------
 bool wallet3::show_address(const std::vector<std::string> &args)
 {
+    SCOPED_WALLET_UNLOCK();
+
     tools::msg_writer() << tr("Wallet address: ");
     tools::msg_writer() << m_current_address << std::endl;
+    tools::msg_writer() << "-------- Keys --------";
+    tools::msg_writer() << "Legacy private spend-key: " << m_key_container.get_legacy_keys().k_s << std::endl;
+    tools::msg_writer() << "Legacy private view-key: " << m_key_container.get_legacy_keys().k_v << std::endl;
+    tools::msg_writer() << "Seraphis private master-key: " << m_key_container.get_sp_keys().k_m << std::endl;
+    tools::msg_writer() << "Seraphis private viewbalance-key: " << m_key_container.get_sp_keys().k_vb << std::endl;
 
     return true;
 }
@@ -1237,10 +1298,31 @@ bool wallet3::show_balance(const std::vector<std::string> &args)
 {
     SCOPED_WALLET_UNLOCK();
 
-    const scanning::ScanMachineConfig refresh_config{
-        .reorg_avoidance_increment = 0, .max_chunk_size_hint = 1, .max_partialscan_attempts = 0};
+        const scanning::ScanMachineConfig refresh_config{
+            .reorg_avoidance_increment = 1000, .max_chunk_size_hint = 1000, .max_partialscan_attempts = 100};
 
     refresh_user_enote_store(m_key_container.get_sp_keys(), refresh_config, m_ledger_context, m_enote_store);
+
+    rct::key legacy_subaddr_spendkey;
+    rct::key legacy_subaddr_viewkey;
+    cryptonote::subaddress_index legacy_subaddr_index;
+    std::unordered_map<rct::key, cryptonote::subaddress_index> legacy_subaddress_map;
+
+    gen_legacy_subaddress(m_key_container.get_legacy_keys().Ks,
+        m_key_container.get_legacy_keys().k_v,
+        legacy_subaddr_spendkey,
+        legacy_subaddr_viewkey,
+        legacy_subaddr_index);
+
+    legacy_subaddress_map[legacy_subaddr_spendkey] = legacy_subaddr_index;
+
+    refresh_user_enote_store_legacy_full(m_key_container.get_legacy_keys().Ks,
+        legacy_subaddress_map,
+        m_key_container.get_legacy_keys().k_s,
+        m_key_container.get_legacy_keys().k_v,
+        refresh_config,
+        m_ledger_context,
+        m_enote_store);
 
     // get_balance should get UNSPENT instead??
     boost::multiprecision::uint128_t balance = get_balance(m_enote_store, {SpEnoteOriginStatus::ONCHAIN}, {SpEnoteSpentStatus::SPENT_ONCHAIN});
@@ -1253,12 +1335,8 @@ bool wallet3::show_balance(const std::vector<std::string> &args)
 //----------------------------------------------------------------------------------------------------
 bool wallet3::transfer(const std::vector<std::string> &args)
 {
-
     std::vector<std::string> local_args = args;
 
-    JamtisDestinationV1 destination_address;
-    JamtisAddressNetwork destination_network;
-    JamtisAddressVersion destination_version;
     if (local_args.size() != 2)
     {
         PRINT_USAGE(USAGE_SHOW_TRANSFER);
@@ -1267,10 +1345,13 @@ bool wallet3::transfer(const std::vector<std::string> &args)
 
     SCOPED_WALLET_UNLOCK();
 
+    JamtisDestinationV1 destination_address;
+    JamtisAddressNetwork destination_network;
+    JamtisAddressVersion destination_version;
+
     get_destination_from_str(local_args[0], destination_address, destination_version, destination_network);
     rct::xmr_amount amount{std::stoull(local_args[1])};
 
-    // Data for transfer
     const scanning::ScanMachineConfig refresh_config{
         .reorg_avoidance_increment = 1, .max_chunk_size_hint = 1, .max_partialscan_attempts = 0};
 
@@ -1296,7 +1377,6 @@ bool wallet3::transfer(const std::vector<std::string> &args)
     const std::size_t ref_set_decomp_m{2};
 
     //  make sure to have enough fake enotes to the ledger so we can reliably
-    //  make seraphis membership proofs
     std::vector<rct::xmr_amount> fake_sp_enote_amounts(
         static_cast<std::size_t>(compute_bin_width(bin_config.bin_radius)), 0);
 
@@ -1342,11 +1422,6 @@ bool wallet3::transfer(const std::vector<std::string> &args)
 //----------------------------------------------------------------------------------------------------
 bool wallet3::show_enotes_cmd(const std::vector<std::string> &args)
 {
-    SCOPED_WALLET_UNLOCK();
-    const scanning::ScanMachineConfig refresh_config{
-        .reorg_avoidance_increment = 1, .max_chunk_size_hint = 10, .max_partialscan_attempts = 10};
-    refresh_user_enote_store(m_key_container.get_sp_keys(), refresh_config, m_ledger_context, m_enote_store);
-
     std::vector<std::string> local_args = args;
     std::string tx_direction = "all";
     uint64_t initial_height = 0, final_height = -1;
@@ -1356,6 +1431,8 @@ bool wallet3::show_enotes_cmd(const std::vector<std::string> &args)
         PRINT_USAGE(USAGE_SHOW_ENOTES);
         return true;
     }
+
+    SCOPED_WALLET_UNLOCK();
 
     if (local_args.size() >= 1)
     {
@@ -1431,73 +1508,119 @@ bool wallet3::show_specific_enote_cmd(const std::vector<std::string> &args)
 //----------------------------------------------------------------------------------------------------
 bool wallet3::get_enote_ownership_proof_sender_cmd(const std::vector<std::string> &args)
 {
-    SCOPED_WALLET_UNLOCK();
-
+    // 1. check arguments
     std::vector<std::string> local_args = args;
     rct::key tx_id;
     rct::key onetime_address;
 
-    if ((local_args.size() > 2) || (local_args.size() == 0))
+    if ((local_args.size() != 2))
     {
         PRINT_USAGE(USAGE_GET_ENOTE_OWNERSHIP_PROOF_SENDER);
         return true;
     }
 
-    if (local_args.size() > 0)
+    SCOPED_WALLET_UNLOCK();
+
+    try
     {
+        // 2. get tx_id and onetime_address
         epee::string_tools::hex_to_pod(local_args[0], tx_id);
-        if (local_args.size() == 2)
-        {
-            epee::string_tools::hex_to_pod(local_args[1], onetime_address);
-        }
+        epee::string_tools::hex_to_pod(local_args[1], onetime_address);
+
+        // 3. get the tx_record
+        TransactionRecord tx_record;
+        CHECK_AND_ASSERT_THROW_MES(m_transaction_history.try_get_tx_record_from_txid(tx_id, tx_record),
+            "Error in kp_get_enote_ownership_proof: Transaction not found.");
+
+        // 4. From tx_id get all output enotes of a tx by querying node.
+        std::vector<SpEnoteVariant> out_enotes = m_ledger_context.get_sp_enotes_out_from_tx(tx_id);
+
+        // 5. get input context
+        rct::key input_context;
+        make_jamtis_input_context_standard(tx_record.legacy_spent_enotes, tx_record.sp_spent_enotes, input_context);
+
+        // 6. try to match enotes with destinations
+        std::vector<EnoteInfo> vec_enote_out_info;
+        CHECK_AND_ASSERT_THROW_MES(try_get_enote_out_info(out_enotes,
+                                       tx_record.normal_payments,
+                                       tx_record.selfsend_payments,
+                                       input_context,
+                                       m_key_container.get_sp_keys().k_vb,
+                                       vec_enote_out_info),
+            "Error in get_enote_out_info. Could not match onetime adresses with destinations.");
+
+        EnoteInfo specific_enote_info{};
+        get_specific_enote_out_info(vec_enote_out_info, onetime_address, specific_enote_info);
+
+        // 7. make enote sent proof for normal and selfsend enotes
+        boost::optional<std::string> filename{"tx_enote_ownership_proof_sender"};
+        boost::optional<std::string> str_proof;
+        str_proof = get_enote_ownership_proof_sender(
+            tx_id, m_key_container.get_sp_keys().k_vb, specific_enote_info, m_transaction_history, filename);
+
+        tools::success_msg_writer() << "Enote ownership proof sender generated." << std::endl;
+        return true;
+    }
+    catch (...)
+    {
+        tools::fail_msg_writer() << "Enote ownership proof sender failed." << std::endl;
+        return true;
+    }
+}
+//----------------------------------------------------------------------------------------------------
+bool wallet3::get_enote_ownership_proof_receiver_cmd(const std::vector<std::string> &args)
+{
+    // note: it may be better to include the tx_id and onetime_address in the proof
+    // so the checker can check only the file against a reliable ledger
+
+    // 1. check arguments
+    std::vector<std::string> local_args = args;
+    crypto::key_image key_image;
+
+    if ((local_args.size() != 1))
+    {
+        PRINT_USAGE(USAGE_GET_ENOTE_OWNERSHIP_PROOF_RECEIVER);
+        return true;
     }
 
-    TransactionRecord tx_record;
-    CHECK_AND_ASSERT_THROW_MES(m_transaction_history.try_get_tx_record_from_txid(tx_id, tx_record),
-        "Error in kp_get_enote_ownership_proof: Transaction not found.");
+    SCOPED_WALLET_UNLOCK();
 
-    // 7. From tx_id get all output enotes of a tx by querying node.
-    std::vector<SpEnoteVariant> out_enotes = m_ledger_context.get_sp_enotes_out_from_tx(tx_id);
+    try
+    {
+        // 2. get key_image
+        epee::string_tools::hex_to_pod(local_args[0], key_image);
+        SpContextualEnoteRecordV1 contextual_enote_record;
 
-    // 8. get input context
-    rct::key input_context;
-    make_jamtis_input_context_standard(tx_record.legacy_spent_enotes, tx_record.sp_spent_enotes, input_context);
+        // 3. get contextual enote record from key_image
+        m_enote_store.try_get_sp_enote_record(key_image, contextual_enote_record);
 
-    // 9. try to match enotes with destinations
-    std::vector<EnoteInfo> vec_enote_out_info;
-    CHECK_AND_ASSERT_THROW_MES(try_get_enote_out_info(out_enotes,
-                                   tx_record.normal_payments,
-                                   tx_record.selfsend_payments,
-                                   input_context,
-                                   m_key_container.get_sp_keys().k_vb,
-                                   vec_enote_out_info),
-        "Error in get_enote_out_info. Could not match onetime adresses with destinations.");
+        // 4. make proof
+        boost::optional<std::string> filename{"tx_enote_ownership_proof_receiver"};
+        boost::optional<std::string> str_proof;
+        str_proof = get_enote_ownership_proof_receiver(contextual_enote_record.record, m_key_container.get_sp_keys().K_1_base, m_key_container.get_sp_keys().k_vb,contextual_enote_record.origin_context.transaction_id, filename);
 
-    EnoteInfo specific_enote_info{};
-    get_specific_enote_out_info(vec_enote_out_info, onetime_address, specific_enote_info);
-
-    // 10. make enote sent proof for normal and selfsend enotes
-    boost::optional<std::string> filename{"tx_enote_ownership_proof"};
-    boost::optional<std::string> str_proof;
-    str_proof = get_enote_ownership_proof_sender(tx_id,
-        m_key_container.get_sp_keys().k_vb,
-        specific_enote_info,
-        m_transaction_history,
-        filename);
-
-    tools::success_msg_writer() << "Enote ownership proof sender generated." << std::endl;
-    return true;
+        tools::success_msg_writer() << "Enote ownership proof receiver generated." << std::endl;
+        return true;
+    }
+    catch (...)
+    {
+        tools::fail_msg_writer() << "Enote ownership proof receiver failed." << std::endl;
+        return true;
+    }
 }
 //----------------------------------------------------------------------------------------------------
 bool wallet3::check_enote_ownership_proof_cmd(const std::vector<std::string> &args)
 {
+    // note: it may be better to include the tx_id in the proof
+    // so the checker can check only the file against a reliable ledger
+
+    // 1. check arguments
     std::vector<std::string> local_args = args;
-    rct::key tx_id;
     boost::optional<std::string> filename{"tx_enote_ownership_proof"};
     boost::optional<std::string> str_proof;
     rct::key expected_amount_commitment, expected_onetime_address;
 
-    if ((local_args.size() > 2) || (local_args.size() == 0))
+    if (local_args.size() > 1)
     {
         PRINT_USAGE(USAGE_CHECK_ENOTE_OWNERSHIP_PROOF);
         return true;
@@ -1505,20 +1628,32 @@ bool wallet3::check_enote_ownership_proof_cmd(const std::vector<std::string> &ar
 
     if (local_args.size() > 0)
     {
-        epee::string_tools::hex_to_pod(local_args[0], tx_id);
-        if (local_args.size() == 2)
-        {
-            epee::string_tools::hex_to_pod(local_args[1], expected_onetime_address);
-        }
+        filename = local_args[0];
     }
 
-    // 7. From tx_id get all output enotes of a tx by querying node.
-    std::vector<SpEnoteVariant> vec_enotes = m_ledger_context.get_sp_enotes_out_from_tx(tx_id);
+    // 2. read proof from file or string
+    EnoteOwnershipProofV1 enote_ownership_proof{};
+    try
+    {
+        ser_EnoteOwnershipProofV1 ser_enote_ownership_proof{
+            str_to_proof<ser_EnoteOwnershipProofV1>("SpEnoteOwnershipProofV1", filename, str_proof)};
+        recover_enote_ownership_proof_v1(ser_enote_ownership_proof, enote_ownership_proof);
+    }
+    catch (...)
+    {
+        tools::fail_msg_writer() << "Failed to retrieve enote ownership proof." << std::endl;
+        return true;
+    }
 
-    // get amount commitment
-    get_amount_commitment_from_tx_id(vec_enotes, expected_onetime_address, expected_amount_commitment);
+    // 3. from tx_id get all output enotes of a tx by querying node.
+    std::vector<SpEnoteVariant> vec_enotes = m_ledger_context.get_sp_enotes_out_from_tx(enote_ownership_proof.tx_id);
 
-    if(read_enote_ownership_proof(filename, str_proof, expected_amount_commitment ,expected_onetime_address))
+    // 4. get amount commitment
+    expected_onetime_address = enote_ownership_proof.Ko;
+    get_amount_commitment_from_tx_id(vec_enotes,expected_onetime_address, expected_amount_commitment);
+
+    // 5. verify proof
+    if(verify_enote_ownership_proof_v1(enote_ownership_proof, expected_amount_commitment ,expected_onetime_address))
         tools::success_msg_writer() << "Enote ownership proof is valid." << std::endl;
     else
         tools::fail_msg_writer() << "Enote ownership proof is not valid." << std::endl;

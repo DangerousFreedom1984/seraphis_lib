@@ -103,13 +103,15 @@ static void get_output_proposal_address_parts_v1(const rct::key &q,
 bool operator==(const JamtisPaymentProposalV1 a, const JamtisPaymentProposalV1 b)
 {
     return a.destination == b.destination && a.amount == b.amount &&
-        a.enote_ephemeral_privkey == b.enote_ephemeral_privkey && a.partial_memo == b.partial_memo;
+        a.enote_ephemeral_privkey == b.enote_ephemeral_privkey && a.partial_memo == b.partial_memo &&
+        a.address_network == b.address_network && a.address_version == b.address_version;
 }
 //-------------------------------------------------------------------------------------------------------------------
 bool operator==(const JamtisPaymentProposalSelfSendV1 a, const JamtisPaymentProposalSelfSendV1 b)
 {
     return a.destination == b.destination && a.amount == b.amount && a.type == b.type &&
-        a.enote_ephemeral_privkey == b.enote_ephemeral_privkey && a.partial_memo == b.partial_memo;
+        a.enote_ephemeral_privkey == b.enote_ephemeral_privkey && a.partial_memo == b.partial_memo &&
+        a.address_network == b.address_network && a.address_version == b.address_version;
 }
 //-------------------------------------------------------------------------------------------------------------------
 void get_enote_ephemeral_pubkey(const JamtisPaymentProposalV1 &proposal,

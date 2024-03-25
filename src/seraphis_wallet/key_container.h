@@ -33,6 +33,7 @@
 #include "crypto/crypto.h"
 #include "crypto/x25519.h"
 #include "cryptonote_basic/account.h"
+#include "cryptonote_config.h"
 #include "seraphis_core/jamtis_destination.h"
 #include "seraphis_wallet/address_utils.h"
 #include "seraphis_wallet/jamtis_keys.h"
@@ -63,8 +64,6 @@ struct ser_JamtisKeys
     crypto::x25519_pubkey xK_fr;     // find-received pubkey  = xk_fr xk_ua xG
 
     BEGIN_SERIALIZE()
-    FIELD(k_s_legacy)
-    FIELD(k_v_legacy)
     FIELD(k_m)
     FIELD(k_vb)
     FIELD(xk_ua)
@@ -74,6 +73,33 @@ struct ser_JamtisKeys
     FIELD(K_1_base)
     FIELD(xK_ua)
     FIELD(xK_fr)
+    END_SERIALIZE()
+};
+
+struct ser_LegacyKeys
+{
+    crypto::secret_key k_s;  //spend privkey
+    crypto::secret_key k_v;  //view privkey
+    rct::key Ks;             //main spend pubkey: Ks = k_s G
+    rct::key Kv;             //main view pubkey:  Kv = k_v G
+
+    BEGIN_SERIALIZE()
+    FIELD(k_s)
+    FIELD(k_v)
+    FIELD(Ks)
+    FIELD(Kv)
+    END_SERIALIZE()
+};
+
+
+struct ser_Keys_v1
+{
+    ser_JamtisKeys jamtis_keys;
+    ser_LegacyKeys legacy_keys;
+
+    BEGIN_SERIALIZE()
+    FIELD(jamtis_keys)
+    FIELD(legacy_keys)
     END_SERIALIZE()
 };
 
@@ -129,6 +155,7 @@ public:
     bool verify_password(const crypto::chacha_key &chacha_key);
 
     /// check if keys are valid
+    bool jamtis_keys_valid(const Keys_v1 &keys, const crypto::chacha_key &chacha_key);
     bool jamtis_keys_valid(const JamtisKeys &keys, const crypto::chacha_key &chacha_key);
 
     /// encrypt keys in-memory
@@ -145,6 +172,7 @@ public:
 
     /// generate new keys
     void generate_keys();
+    void generate_jamtis_and_legacy_keys(); //only for unit_tests
 
     /// write wallet tiers
     bool write_master(const std::string &path, crypto::chacha_key const &chacha_key);
@@ -164,11 +192,15 @@ public:
     /// get the zero address for loaded wallet
     std::string get_address_zero(const JamtisAddressVersion address_version, const JamtisAddressNetwork address_network);
 
-    /// make jamtis_keys serializable
+    /// make keys serializable
     void make_serializable_jamtis_keys(ser_JamtisKeys &serializable_keys);
+    void make_serializable_legacy_keys(ser_LegacyKeys &serializable_keys);
+    void make_serializable_keys_v1(ser_Keys_v1 &serializable_keys);
 
     /// recover keys from serializable
     void recover_jamtis_keys(const ser_JamtisKeys &ser_keys, JamtisKeys &keys_out);
+    void recover_legacy_keys(const ser_LegacyKeys &ser_keys, LegacyKeys &keys_out);
+    void recover_keys_v1(const ser_Keys_v1 &ser_keys, Keys_v1 &keys_out);
 
     /// compare the keys of two containers that have the same chacha_key
     bool compare_keys(KeyContainer &other, const crypto::chacha_key &chacha_key);

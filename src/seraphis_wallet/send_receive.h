@@ -63,7 +63,12 @@ void convert_outlay_to_payment_proposal(const rct::xmr_amount outlay_amount,
     const JamtisAddressVersion address_version,
     const JamtisAddressNetwork address_network,
     jamtis::JamtisPaymentProposalV1 &payment_proposal_out);
-/// send funds as coinbase enotes
+/// send legacy funds as coinbase enotes
+void send_legacy_coinbase_amounts_to_user(const std::vector<rct::xmr_amount> &coinbase_amounts,
+    const rct::key &destination_subaddr_spend_pubkey,
+    const rct::key &destination_subaddr_view_pubkey,
+    mocks::MockLedgerContext &ledger_context_inout);
+/// send sp funds as coinbase enotes
 void send_sp_coinbase_amounts_to_user(const std::vector<rct::xmr_amount> &coinbase_amounts,
     const jamtis::JamtisDestinationV1 &user_address,
     const JamtisAddressVersion address_version,
@@ -85,10 +90,16 @@ void construct_tx_for_mock_ledger_v1(const jamtis::LegacyKeys &local_user_legacy
     SpTxSquashedV1 &tx_out,
     std::vector<jamtis::JamtisPaymentProposalSelfSendV1> &selfsend_payments_out,
     std::vector<jamtis::JamtisPaymentProposalV1> &normal_payments_out);
-/// create transactions and submit them to a mock ledger
+/// refresh enote store
 void refresh_user_enote_store(const jamtis::JamtisKeys &user_keys,
     const scanning::ScanMachineConfig &refresh_config,
     const mocks::MockLedgerContext &ledger_context,
     SpEnoteStore &user_enote_store_inout);
-
+void refresh_user_enote_store_legacy_full(const rct::key &legacy_base_spend_pubkey,
+    const std::unordered_map<rct::key, cryptonote::subaddress_index> &legacy_subaddress_map,
+    const crypto::secret_key &legacy_spend_privkey,
+    const crypto::secret_key &legacy_view_privkey,
+    const scanning::ScanMachineConfig &refresh_config,
+    const mocks::MockLedgerContext &ledger_context,
+    SpEnoteStore &user_enote_store_inout);
 } //namespace sp

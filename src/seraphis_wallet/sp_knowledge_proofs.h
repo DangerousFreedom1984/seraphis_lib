@@ -141,6 +141,7 @@ std::string get_enote_ownership_proof_sender(const rct::key txid,
 std::string get_enote_ownership_proof_receiver(const SpEnoteRecordV1 &enote_record,
     const rct::key &jamtis_spend_pubkey,
     const crypto::secret_key &k_vb,
+    const rct::key txid,
     const boost::optional<std::string> filename);
 
 /**

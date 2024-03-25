@@ -162,18 +162,20 @@ void recover_address_index_proof_v1(const ser_AddressIndexProofV1 &ser_proof, Ad
 void make_serializable_enote_ownership_proof_v1(const EnoteOwnershipProofV1 &proof,
     ser_EnoteOwnershipProofV1 &ser_proof_out)
 {
-    ser_proof_out.K_1 = proof.K_1;
-    ser_proof_out.C   = proof.C;
-    ser_proof_out.Ko  = proof.Ko;
-    ser_proof_out.q   = proof.q;
+    ser_proof_out.K_1   = proof.K_1;
+    ser_proof_out.C     = proof.C;
+    ser_proof_out.Ko    = proof.Ko;
+    ser_proof_out.q     = proof.q;
+    ser_proof_out.tx_id = proof.tx_id;
 }
 
 void recover_enote_ownership_proof_v1(const ser_EnoteOwnershipProofV1 &ser_proof, EnoteOwnershipProofV1 &proof_out)
 {
-    proof_out.K_1 = ser_proof.K_1;
-    proof_out.C   = ser_proof.C;
-    proof_out.Ko  = ser_proof.Ko;
-    proof_out.q   = ser_proof.q;
+    proof_out.K_1   = ser_proof.K_1;
+    proof_out.C     = ser_proof.C;
+    proof_out.Ko    = ser_proof.Ko;
+    proof_out.q     = ser_proof.q;
+    proof_out.tx_id = ser_proof.tx_id;
 }
 
 void make_serializable_enote_amount_proof_v1(const EnoteAmountProofV1 &proof, ser_EnoteAmountProofV1 &ser_proof_out)

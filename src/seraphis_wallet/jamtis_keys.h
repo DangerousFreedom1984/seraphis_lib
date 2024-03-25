@@ -38,6 +38,7 @@
 #include "crypto/x25519.h"
 #include "ringct/rctTypes.h"
 #include "seraphis_core/jamtis_destination.h"
+#include "seraphis_core/legacy_core_utils.h"
 
 //third party headers
 
@@ -66,7 +67,6 @@ struct JamtisKeys
     crypto::x25519_pubkey xK_fr;      //find-received pubkey  = xk_fr xk_ua xG
 
     bool operator==(const JamtisKeys &other) const {
-        // use hash?
         return other.k_m == k_m &&
             other.k_vb == k_vb &&
             other.xk_ua == xk_ua &&
@@ -89,13 +89,32 @@ struct LegacyKeys
     crypto::secret_key k_v;  //view privkey
     rct::key Ks;             //main spend pubkey: Ks = k_s G
     rct::key Kv;             //main view pubkey:  Kv = k_v G
+
+    bool operator==(const LegacyKeys &other) const {
+        return other.k_s == k_s &&
+            other.k_v == k_v &&
+            other.Ks == Ks &&
+            other.Kv == Kv;}
+};
+
+/// Struct to load all keys
+struct Keys_v1
+{
+    JamtisKeys jamtis_keys;
+    LegacyKeys legacy_keys;
 };
 
 /// make a set of jamtis keys
+void make_legacy_keys(LegacyKeys &keys_out);
 void make_jamtis_keys(JamtisKeys &keys_out);
 /// make a random jamtis address for the given privkeys
 void make_destination_random(const JamtisKeys &user_keys, JamtisDestinationV1 &user_destination_out);
 void make_destination_zero(const JamtisKeys &user_keys, JamtisDestinationV1 &user_destination_out);
+void gen_legacy_subaddress(const rct::key &legacy_base_spend_pubkey,
+    const crypto::secret_key &legacy_view_privkey,
+    rct::key &subaddr_spendkey_out,
+    rct::key &subaddr_viewkey_out,
+    cryptonote::subaddress_index &subaddr_index_out);
 
 } //namespace jamtis
 } //namespace sp

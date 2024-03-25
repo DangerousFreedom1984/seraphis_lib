@@ -33,6 +33,7 @@
 //local headers
 #include "crypto/crypto.h"
 #include "crypto/x25519.h"
+#include "cryptonote_basic/subaddress_index.h"
 #include "ringct/rctTypes.h"
 #include "seraphis_core/binned_reference_set.h"
 #include "seraphis_core/discretized_fee.h"
@@ -48,6 +49,8 @@
 #include "serialization/pair.h"
 
 //third party headers
+#include <boost/iostreams/detail/select.hpp>
+#include <boost/serialization/optional.hpp>
 
 //standard headers
 #include <vector>
@@ -589,7 +592,7 @@ struct ser_SpEnoteOriginContextV1 final
     /// tx memo
     std::vector<unsigned char> tx_extra;
 
-    BEGIN_SERIALIZE_OBJECT();
+    BEGIN_SERIALIZE();
         FIELD(block_index);
         FIELD(block_timestamp);
         FIELD(transaction_id);
@@ -611,7 +614,7 @@ struct ser_SpEnoteSpentContextV1 final
     /// spent status (unspent by default)
     unsigned char spent_status;
 
-    BEGIN_SERIALIZE_OBJECT();
+    BEGIN_SERIALIZE();
         FIELD(block_index);
         FIELD(block_timestamp);
         FIELD(transaction_id);
@@ -633,20 +636,19 @@ struct ser_LegacyIntermediateEnoteRecord final
     /// x: amount blinding factor
     crypto::secret_key amount_blinding_factor;
     /// i: legacy address index (if true, then it's owned by a subaddress)
-    boost::optional<cryptonote::subaddress_index> address_index;
+    cryptonote::subaddress_index address_index{0,0};
     /// t: the enote's index in its transaction
     std::uint64_t tx_output_index;
     /// u: the enote's unlock time
     std::uint64_t unlock_time;
 
-    BEGIN_SERIALIZE_OBJECT();
+    BEGIN_SERIALIZE();
         FIELD(enote);
         FIELD(enote_ephemeral_pubkey);
         FIELD(enote_view_extension);
         FIELD(amount);
         FIELD(amount_blinding_factor);
-        if (address_index)
-            FIELD(address_index.get());
+        FIELD(address_index);
         FIELD(tx_output_index);
         FIELD(unlock_time);
     END_SERIALIZE();
@@ -667,21 +669,20 @@ struct ser_LegacyEnoteRecord final
     /// KI: key image
     crypto::key_image key_image;
     /// i: legacy address index (if true, then it's owned by a subaddress)
-    boost::optional<cryptonote::subaddress_index> address_index;
+    cryptonote::subaddress_index address_index{0,0};
     /// t: the enote's index in its transaction
     std::uint64_t tx_output_index;
     /// u: the enote's unlock time
     std::uint64_t unlock_time;
 
-    BEGIN_SERIALIZE_OBJECT();
+    BEGIN_SERIALIZE();
         FIELD(enote);
         FIELD(enote_ephemeral_pubkey);
         FIELD(enote_view_extension);
         FIELD(amount);
         FIELD(amount_blinding_factor);
         FIELD(key_image)
-        if (address_index)
-            FIELD(address_index.get());
+        FIELD(address_index);
         FIELD(tx_output_index);
         FIELD(unlock_time);
     END_SERIALIZE();
@@ -846,6 +847,8 @@ struct ser_SpEnoteStore final
         FIELD(legacy_intermediate_contextual_enote_records);
         FIELD(legacy_contextual_enote_records);
         FIELD(sp_contextual_enote_records);
+        FIELD(legacy_key_images_in_sp_selfsends);
+        FIELD(tracked_legacy_onetime_address_duplicates);
         FIELD(legacy_key_images);
         FIELD(legacy_block_id_cache);
         FIELD(sp_block_id_cache);

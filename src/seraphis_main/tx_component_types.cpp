@@ -334,6 +334,12 @@ bool operator==(const SpEnoteVariant &variant1, const SpEnoteVariant &variant2)
     return variant1.visit(visitor{variant2});
 }
 //-------------------------------------------------------------------------------------------------------------------
+bool operator==(const SpTxSupplementV1 &tx_supplement1, const SpTxSupplementV1 &tx_supplement2)
+{
+    return tx_supplement1.output_enote_ephemeral_pubkeys == tx_supplement2.output_enote_ephemeral_pubkeys &&
+        tx_supplement1.tx_extra == tx_supplement2.tx_extra;
+}
+//-------------------------------------------------------------------------------------------------------------------
 bool compare_Ko(const SpCoinbaseEnoteV1 &a, const SpCoinbaseEnoteV1 &b)
 {
     return compare_Ko(a.core, b.core);

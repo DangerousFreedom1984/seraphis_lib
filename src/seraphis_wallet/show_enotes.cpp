@@ -31,7 +31,6 @@
 
 // local headers
 #include "common/util.h"
-#include "common/scoped_message_writer.h"
 #include "crypto/crypto.h"
 #include "misc_log_ex.h"
 #include "ringct/rctTypes.h"
@@ -54,8 +53,6 @@
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "seraphis_wallet"
-
-using tools::scoped_message_writer;
 
 using namespace std;
 //-------------------------------------------------------------------------------------------------------------------

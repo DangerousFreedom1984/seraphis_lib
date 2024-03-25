@@ -368,7 +368,6 @@ struct ser_MockLedgerContext
     /// first block where only seraphis txs are allowed
     std::uint64_t m_first_seraphis_only_block;
 
-
     //// UNCONFIRMED TXs
 
     /// cryptonote key images (legacy)
@@ -483,6 +482,8 @@ bool try_add_tx_to_ledger(const SpTxSquashedV1 &tx_to_add, MockLedgerContext &le
 
 void make_serializable_mock_ledger_context(const MockLedgerContext &mock_ledger, ser_MockLedgerContext &serializable_out);
 void recover_mock_ledger_context(const ser_MockLedgerContext &serializable, MockLedgerContext &mock_ledger_out);
+
+bool operator==(const MockLedgerContext&a, const MockLedgerContext &b);
 
 } //namespace mocks
 } //namespace sp

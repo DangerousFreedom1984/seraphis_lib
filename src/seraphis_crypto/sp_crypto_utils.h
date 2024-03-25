@@ -56,6 +56,7 @@ struct sortable_key
     sortable_key() = default;
     sortable_key(const rct::key &rct_key) { memcpy(bytes, rct_key.bytes, 32); }
     bool operator<(const sortable_key &other) const { return memcmp(bytes, other.bytes, 32) < 0; }
+    bool operator==(const sortable_key &other) const { return other.bytes == bytes; }
 };
 inline const rct::key& sortable2rct(const sortable_key &k) { return reinterpret_cast<const rct::key&>(k); }
 

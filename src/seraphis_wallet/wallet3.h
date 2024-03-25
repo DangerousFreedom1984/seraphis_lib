@@ -50,10 +50,6 @@
 
 // forward declarations
 
-using namespace sp;
-using namespace jamtis;
-using namespace seraphis_wallet;
-
 class wallet3;
 
 enum class WalletDerivation
@@ -100,7 +96,6 @@ class wallet3
     // save/load enote_store and tx_history
     bool save_enote_and_tx_store(const crypto::chacha_key &key);
     bool load_enote_and_tx_store(const crypto::chacha_key &key);
-
 
     // wallet tiers
     bool create_view_all(const epee::wipeable_string& password);
@@ -159,13 +154,15 @@ class wallet3
     bool save_addrgen(const std::vector<std::string> &args);
 
     // Experimental testing functions
-    bool create_money(const std::vector<std::string> &args);
+    bool create_money_sp(const std::vector<std::string> &args);
+    // bool create_money_legacy(const std::vector<std::string> &args);
     bool show_address(const std::vector<std::string> &args);
     bool show_balance(const std::vector<std::string> &args);
     bool transfer(const std::vector<std::string> &args);
     bool show_enotes_cmd(const std::vector<std::string> &args);
     bool show_specific_enote_cmd(const std::vector<std::string> &args);
     bool get_enote_ownership_proof_sender_cmd(const std::vector<std::string> &args);
+    bool get_enote_ownership_proof_receiver_cmd(const std::vector<std::string> &args);
     bool check_enote_ownership_proof_cmd(const std::vector<std::string> &args);
 
     /// member variables
@@ -181,13 +178,13 @@ class wallet3
     WalletDerivation m_wallet_derivation;
     std::unique_ptr<tools::file_locker> m_keys_file_locker;
     address_index_t m_current_index{make_address_index(0, 0)};
-    WalletType m_wallet_type;
+    seraphis_wallet::WalletType m_wallet_type;
     uint64_t m_kdf_rounds;
     JamtisAddressNetwork m_address_network;
     JamtisAddressVersion m_address_version;
 
     // keys, enotes storage and tx_history
-    KeyContainer m_key_container;
+    seraphis_wallet::KeyContainer m_key_container;
     SpEnoteStore m_enote_store{0, 0, 0};
     SpTransactionHistory m_transaction_history;
 

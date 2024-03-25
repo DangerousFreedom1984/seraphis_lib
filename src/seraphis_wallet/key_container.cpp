@@ -35,6 +35,7 @@
 #include "crypto/x25519.h"
 #include "cryptonote_basic/account.h"
 #include "ringct/rctOps.h"
+#include "ringct/rctTypes.h"
 #include "seraphis_core/jamtis_core_utils.h"
 #include "seraphis_core/jamtis_destination.h"
 #include "seraphis_core/sp_core_enote_utils.h"
@@ -73,7 +74,7 @@ KeyContainer::KeyContainer(JamtisKeys &&sp_keys,
 bool KeyContainer::load_from_keys_file(const std::string &path, const crypto::chacha_key &chacha_key, bool check)
 {
     // 1. define serializable
-    ser_JamtisKeys ser_keys;
+    ser_Keys_v1 ser_keys;
 
     // 2. get the keys in the encrypted file into the serializable
     if (!read_encrypted_file(path, chacha_key, ser_keys))
@@ -83,8 +84,8 @@ bool KeyContainer::load_from_keys_file(const std::string &path, const crypto::ch
     }
 
     // 3. recover jamtis keys
-    JamtisKeys recovered_keys{};
-    recover_jamtis_keys(ser_keys, recovered_keys);
+    Keys_v1 recovered_keys{};
+    recover_keys_v1(ser_keys, recovered_keys);
 
     // 4. check if keys are valid and move to m_keys if not verifying password
     if (!jamtis_keys_valid(recovered_keys, chacha_key))
@@ -96,8 +97,9 @@ bool KeyContainer::load_from_keys_file(const std::string &path, const crypto::ch
     if (check)
         return true;
 
-    // 5. store keys in m_sp_keys
-    m_sp_keys = std::move(recovered_keys);
+    // 5. store keys in m_sp_keys and m_legacy_keys
+    m_sp_keys = std::move(recovered_keys.jamtis_keys);
+    m_legacy_keys = std::move(recovered_keys.legacy_keys);
 
     return true;
 }
@@ -116,6 +118,11 @@ bool KeyContainer::verify_password(const crypto::chacha_key &chacha_key)
         encrypt(chacha_key);
 
     return r;
+}
+//-------------------------------------------------------------------------------------------------------------------
+bool KeyContainer::jamtis_keys_valid(const Keys_v1 &keys, const crypto::chacha_key &chacha_key)
+{
+    return jamtis_keys_valid(keys.jamtis_keys, chacha_key);
 }
 //-------------------------------------------------------------------------------------------------------------------
 bool KeyContainer::jamtis_keys_valid(const JamtisKeys &keys, const crypto::chacha_key &chacha_key)
@@ -236,6 +243,13 @@ void KeyContainer::generate_keys()
     make_jamtis_keys(m_sp_keys);
 }
 //-------------------------------------------------------------------------------------------------------------------
+void KeyContainer::generate_jamtis_and_legacy_keys()
+{
+    // 1. generate new keys and store to m_keys
+    make_jamtis_keys(m_sp_keys);
+    make_legacy_keys(m_legacy_keys);
+}
+//-------------------------------------------------------------------------------------------------------------------
 bool KeyContainer::write_master(const std::string &path, const crypto::chacha_key &chacha_key)
 {
     // 1. decrypt keys if they are encrypted in memory
@@ -245,7 +259,7 @@ bool KeyContainer::write_master(const std::string &path, const crypto::chacha_ke
     // 2. copy keys to serializable
     // (the serializable with the decrypted private keys will
     // remain in memory only during the scope of the function)
-    ser_JamtisKeys ser_keys = {
+    ser_JamtisKeys ser_jamtis_keys = {
         .k_m        = m_sp_keys.k_m,
         .k_vb       = m_sp_keys.k_vb,
         .xk_ua      = m_sp_keys.xk_ua,
@@ -255,6 +269,18 @@ bool KeyContainer::write_master(const std::string &path, const crypto::chacha_ke
         .K_1_base   = m_sp_keys.K_1_base,
         .xK_ua      = m_sp_keys.xK_ua,
         .xK_fr      = m_sp_keys.xK_fr,
+    };
+
+    ser_LegacyKeys ser_legacy_keys = {
+        .k_s = m_legacy_keys.k_s,
+        .k_v = m_legacy_keys.k_v,
+        .Ks = m_legacy_keys.Ks,
+        .Kv = m_legacy_keys.Kv
+    };
+
+    ser_Keys_v1 ser_keys = {
+        .jamtis_keys = ser_jamtis_keys,
+        .legacy_keys = ser_legacy_keys
     };
 
     // 4. write serializable to file
@@ -282,8 +308,20 @@ bool KeyContainer::write_view_all(const std::string &path, const crypto::chacha_
         .xK_fr    = m_sp_keys.xK_fr,
     };
 
+    ser_LegacyKeys ser_legacy_keys = {
+        .k_s = rct::rct2sk(rct::zero()),
+        .k_v = m_legacy_keys.k_v,
+        .Ks = m_legacy_keys.Ks,
+        .Kv = m_legacy_keys.Kv
+    };
+
+    ser_Keys_v1 ser_keys = {
+        .jamtis_keys = view_all,
+        .legacy_keys = ser_legacy_keys
+    };
+
     // 3. write serializable to file
-    return write_encrypted_file(path, chacha_key, view_all);
+    return write_encrypted_file(path, chacha_key, ser_keys);
 }
 //-------------------------------------------------------------------------------------------------------------------
 bool KeyContainer::write_view_received(const std::string &path, const crypto::chacha_key &chacha_key)
@@ -307,8 +345,20 @@ bool KeyContainer::write_view_received(const std::string &path, const crypto::ch
         .xK_fr    = m_sp_keys.xK_fr,
     };
 
+    ser_LegacyKeys ser_legacy_keys = {
+        .k_s = rct::rct2sk(rct::zero()),
+        .k_v = rct::rct2sk(rct::zero()),
+        .Ks = rct::zero(),
+        .Kv = rct::zero()
+    };
+
+    ser_Keys_v1 ser_keys = {
+        .jamtis_keys = view_received,
+        .legacy_keys = ser_legacy_keys
+    };
+
     // 3. write serializable to file
-    return write_encrypted_file(path, chacha_key, view_received);
+    return write_encrypted_file(path, chacha_key, ser_keys);
 }
 //-------------------------------------------------------------------------------------------------------------------
 bool KeyContainer::write_find_received(const std::string &path, const crypto::chacha_key &chacha_key)
@@ -332,8 +382,20 @@ bool KeyContainer::write_find_received(const std::string &path, const crypto::ch
         .xK_fr    = m_sp_keys.xK_fr,
     };
 
+    ser_LegacyKeys ser_legacy_keys = {
+        .k_s = rct::rct2sk(rct::zero()),
+        .k_v = rct::rct2sk(rct::zero()),
+        .Ks = rct::zero(),
+        .Kv = rct::zero()
+    };
+
+    ser_Keys_v1 ser_keys = {
+        .jamtis_keys = find_received,
+        .legacy_keys = ser_legacy_keys
+    };
+
     // 3. write serializable to file
-    return write_encrypted_file(path, chacha_key, find_received);
+    return write_encrypted_file(path, chacha_key, ser_keys);
 }
 //-------------------------------------------------------------------------------------------------------------------
 bool KeyContainer::write_address_generator(const std::string &path, const crypto::chacha_key &chacha_key)
@@ -357,8 +419,20 @@ bool KeyContainer::write_address_generator(const std::string &path, const crypto
         .xK_fr    = m_sp_keys.xK_fr,
     };
 
+    ser_LegacyKeys ser_legacy_keys = {
+        .k_s = rct::rct2sk(rct::zero()),
+        .k_v = rct::rct2sk(rct::zero()),
+        .Ks = rct::zero(),
+        .Kv = rct::zero()
+    };
+
+    ser_Keys_v1 ser_keys = {
+        .jamtis_keys = address_generator,
+        .legacy_keys = ser_legacy_keys
+    };
+
     // 3. write serializable to file
-    return write_encrypted_file(path, chacha_key, address_generator);
+    return write_encrypted_file(path, chacha_key, ser_keys);
 }
 //-------------------------------------------------------------------------------------------------------------------
 WalletType KeyContainer::get_wallet_type()
@@ -433,6 +507,20 @@ void KeyContainer::make_serializable_jamtis_keys(ser_JamtisKeys &serializable_ke
     serializable_keys.xK_fr      = m_sp_keys.xK_fr;
 }
 //-------------------------------------------------------------------------------------------------------------------
+void KeyContainer::make_serializable_legacy_keys(ser_LegacyKeys &serializable_keys)
+{
+    serializable_keys.k_s = m_legacy_keys.k_s;
+    serializable_keys.k_v = m_legacy_keys.k_v;
+    serializable_keys.Ks = m_legacy_keys.Ks;
+    serializable_keys.Kv = m_legacy_keys.Kv;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void KeyContainer::make_serializable_keys_v1(ser_Keys_v1 &serializable_keys)
+{
+    make_serializable_jamtis_keys(serializable_keys.jamtis_keys);
+    make_serializable_legacy_keys(serializable_keys.legacy_keys);
+}
+//-------------------------------------------------------------------------------------------------------------------
 void KeyContainer::recover_jamtis_keys(const ser_JamtisKeys &ser_keys, JamtisKeys &keys_out)
 {
     keys_out.k_m        = ser_keys.k_m;
@@ -446,6 +534,20 @@ void KeyContainer::recover_jamtis_keys(const ser_JamtisKeys &ser_keys, JamtisKey
     keys_out.xK_fr      = ser_keys.xK_fr;
 }
 //-------------------------------------------------------------------------------------------------------------------
+void KeyContainer::recover_legacy_keys(const ser_LegacyKeys &ser_keys, LegacyKeys &keys_out)
+{
+    keys_out.k_s = ser_keys.k_s;
+    keys_out.k_v = ser_keys.k_v;
+    keys_out.Ks = ser_keys.Ks;
+    keys_out.Kv = ser_keys.Kv;
+}
+//-------------------------------------------------------------------------------------------------------------------
+void KeyContainer::recover_keys_v1(const ser_Keys_v1 &ser_keys, Keys_v1 &keys_out)
+{
+    recover_jamtis_keys(ser_keys.jamtis_keys, keys_out.jamtis_keys);
+    recover_legacy_keys(ser_keys.legacy_keys, keys_out.legacy_keys);
+}
+//-------------------------------------------------------------------------------------------------------------------
 bool KeyContainer::compare_keys(KeyContainer &other, const crypto::chacha_key &chacha_key)
 {
 
@@ -455,7 +557,6 @@ bool KeyContainer::compare_keys(KeyContainer &other, const crypto::chacha_key &c
         other.m_sp_keys.K_1_base == m_sp_keys.K_1_base && other.m_sp_keys.xK_ua == m_sp_keys.xK_ua &&
         other.m_sp_keys.xK_fr == m_sp_keys.xK_fr;
 
-    // 5. return result of comparison
     return r;
 }
 //-------------------------------------------------------------------------------------------------------------------

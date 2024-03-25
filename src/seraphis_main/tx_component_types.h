@@ -226,6 +226,7 @@ std::size_t sp_tx_supplement_v1_size_bytes(const SpTxSupplementV1 &tx_supplement
 bool operator==(const SpCoinbaseEnoteV1 &a, const SpCoinbaseEnoteV1 &b);
 bool operator==(const SpEnoteV1 &a, const SpEnoteV1 &b);
 bool operator==(const SpEnoteVariant &variant1, const SpEnoteVariant &variant2);
+bool operator==(const SpTxSupplementV1 &tx_supplement1, const SpTxSupplementV1 &tx_supplement2);
 /// comparison method for sorting: a.Ko < b.Ko
 bool compare_Ko(const SpCoinbaseEnoteV1 &a, const SpCoinbaseEnoteV1 &b);
 bool compare_Ko(const SpEnoteV1 &a, const SpEnoteV1 &b);

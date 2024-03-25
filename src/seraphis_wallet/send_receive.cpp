@@ -34,6 +34,8 @@
 //local headers
 #include "common/container_helpers.h"
 #include "crypto/crypto.h"
+#include "seraphis_core/legacy_core_utils.h"
+#include "seraphis_core/legacy_enote_utils.h"
 #include "seraphis_mocks/enote_finding_context_mocks.h"
 #include "misc_log_ex.h"
 #include "seraphis_mocks/mock_ledger_context.h"
@@ -87,6 +89,48 @@ void convert_outlay_to_payment_proposal(const rct::xmr_amount outlay_amount,
             .address_version         = address_version,
             .address_network         = address_network
         };
+}
+//-------------------------------------------------------------------------------------------------------------------
+void send_legacy_coinbase_amounts_to_user(const std::vector<rct::xmr_amount> &coinbase_amounts,
+    const rct::key &destination_subaddr_spend_pubkey,
+    const rct::key &destination_subaddr_view_pubkey,
+    mocks::MockLedgerContext &ledger_context_inout)
+{
+    // 1. prepare mock coinbase enotes
+    std::vector<LegacyEnoteVariant> coinbase_enotes;
+    std::vector<rct::key> collected_enote_ephemeral_pubkeys;
+    TxExtra tx_extra;
+    coinbase_enotes.reserve(coinbase_amounts.size());
+    coinbase_enotes.reserve(coinbase_amounts.size());
+
+    LegacyEnoteV5 enote_temp;
+
+    for (std::size_t amount_index{0}; amount_index < coinbase_amounts.size(); ++amount_index)
+    {
+        // a. legacy enote ephemeral pubkey
+        const crypto::secret_key enote_ephemeral_privkey{rct::rct2sk(rct::skGen())};
+        collected_enote_ephemeral_pubkeys.emplace_back(
+                rct::scalarmultKey(destination_subaddr_spend_pubkey, rct::sk2rct(enote_ephemeral_privkey))
+            );
+
+        // b. make legacy coinbase enote
+        make_legacy_enote_v5(destination_subaddr_spend_pubkey,
+            destination_subaddr_view_pubkey,
+            coinbase_amounts[amount_index],
+            amount_index,
+            enote_ephemeral_privkey,
+            enote_temp);
+
+        coinbase_enotes.emplace_back(enote_temp);
+    }
+
+    // 2. set tx extra
+    CHECK_AND_ASSERT_THROW_MES(try_append_legacy_enote_ephemeral_pubkeys_to_tx_extra(collected_enote_ephemeral_pubkeys,
+            tx_extra),
+        "send legacy coinbase amounts to user: appending enote ephemeral pubkeys to tx extra failed.");
+
+    // 3. commit coinbase enotes as new block
+    ledger_context_inout.add_legacy_coinbase(rct::pkGen(), 0, std::move(tx_extra), {}, std::move(coinbase_enotes));
 }
 //-------------------------------------------------------------------------------------------------------------------
 void send_sp_coinbase_amounts_to_user(const std::vector<rct::xmr_amount> &coinbase_amounts,
@@ -262,6 +306,36 @@ void refresh_user_enote_store(const jamtis::JamtisKeys &user_keys,
 
     sp::refresh_enote_store(refresh_config,
         scan_context_unconfirmed,
+        scan_context_ledger,
+        chunk_consumer);
+}
+//-------------------------------------------------------------------------------------------------------------------
+void refresh_user_enote_store_legacy_full(const rct::key &legacy_base_spend_pubkey,
+    const std::unordered_map<rct::key, cryptonote::subaddress_index> &legacy_subaddress_map,
+    const crypto::secret_key &legacy_spend_privkey,
+    const crypto::secret_key &legacy_view_privkey,
+    const scanning::ScanMachineConfig &refresh_config,
+    const mocks::MockLedgerContext &ledger_context,
+    SpEnoteStore &user_enote_store_inout)
+{
+    const mocks::EnoteFindingContextLedgerMockLegacy enote_finding_context{
+            ledger_context,
+            legacy_base_spend_pubkey,
+            legacy_subaddress_map,
+            legacy_view_privkey,
+            mocks::LegacyScanMode::SCAN
+        };
+    scanning::ScanContextNonLedgerDummy scan_context_nonledger{};
+    scanning::ScanContextLedgerSimple scan_context_ledger{enote_finding_context};
+    mocks::ChunkConsumerMockLegacy chunk_consumer{
+            legacy_base_spend_pubkey,
+            legacy_spend_privkey,
+            legacy_view_privkey,
+            user_enote_store_inout
+        };
+
+    sp::refresh_enote_store(refresh_config,
+        scan_context_nonledger,
         scan_context_ledger,
         chunk_consumer);
 }

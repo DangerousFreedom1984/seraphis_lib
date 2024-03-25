@@ -32,6 +32,7 @@
 //local headers
 #include "common/container_helpers.h"
 #include "crypto/crypto.h"
+#include "cryptonote_basic/subaddress_index.h"
 #include "misc_log_ex.h"
 #include "ringct/rctOps.h"
 #include "ringct/rctTypes.h"
@@ -488,8 +489,11 @@ void make_serializable_legacy_intermediate_enote_record_v1(const LegacyIntermedi
     serializable_enote_record_out.amount_blinding_factor = enote_record.amount_blinding_factor;
     serializable_enote_record_out.tx_output_index        = enote_record.tx_output_index;
     serializable_enote_record_out.unlock_time            = enote_record.unlock_time;
+    // very dirty trick --> Find a better solution
     if (enote_record.address_index)
-        serializable_enote_record_out.address_index = enote_record.address_index;
+        serializable_enote_record_out.address_index          = enote_record.address_index.get();
+    else
+        serializable_enote_record_out.address_index = cryptonote::subaddress_index{42,42};
 }
 //-------------------------------------------------------------------------------------------------------------------
 void make_serializable_legacy_enote_record(const LegacyEnoteRecord &enote_record,
@@ -503,8 +507,11 @@ void make_serializable_legacy_enote_record(const LegacyEnoteRecord &enote_record
     serializable_enote_record_out.key_image              = enote_record.key_image;
     serializable_enote_record_out.tx_output_index        = enote_record.tx_output_index;
     serializable_enote_record_out.unlock_time            = enote_record.unlock_time;
+    // very dirty trick --> Find a better solution
     if (enote_record.address_index)
-        serializable_enote_record_out.address_index = enote_record.address_index;
+        serializable_enote_record_out.address_index          = enote_record.address_index.get();
+    else
+        serializable_enote_record_out.address_index = cryptonote::subaddress_index{42,42};
 }
 //-------------------------------------------------------------------------------------------------------------------
 void make_serializable_legacy_contextual_intermediate_record_v1(
@@ -1031,7 +1038,9 @@ void recover_legacy_intermediate_enote_record(const ser_LegacyIntermediateEnoteR
     enote_record_out.amount_blinding_factor = serializable_enote_record.amount_blinding_factor;
     enote_record_out.tx_output_index        = serializable_enote_record.tx_output_index;
     enote_record_out.unlock_time            = serializable_enote_record.unlock_time;
-    if (serializable_enote_record.address_index)
+    if (serializable_enote_record.address_index == cryptonote::subaddress_index{42, 42})
+        enote_record_out.address_index = boost::none;
+    else
         enote_record_out.address_index = serializable_enote_record.address_index;
 }
 //-------------------------------------------------------------------------------------------------------------------
@@ -1046,7 +1055,9 @@ void recover_legacy_enote_record(const ser_LegacyEnoteRecord &serializable_enote
     enote_record_out.key_image              = serializable_enote_record.key_image;
     enote_record_out.tx_output_index        = serializable_enote_record.tx_output_index;
     enote_record_out.unlock_time            = serializable_enote_record.unlock_time;
-    if (serializable_enote_record.address_index)
+    if (serializable_enote_record.address_index == cryptonote::subaddress_index{42, 42})
+        enote_record_out.address_index = boost::none;
+    else
         enote_record_out.address_index = serializable_enote_record.address_index;
 }
 //-------------------------------------------------------------------------------------------------------------------

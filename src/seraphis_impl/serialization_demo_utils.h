@@ -54,6 +54,7 @@
 #include "span.h"
 
 //third party headers
+#include <boost/serialization/optional.hpp>
 
 //standard headers
 #include <sstream>
