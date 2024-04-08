@@ -33,8 +33,8 @@
 
 // local headers
 #include "address_utils.h"
-#include "common/command_line.h"
 #include "common/i18n.h"
+#include "common/command_line.h"
 #include "common/password.h"
 #include "common/scoped_message_writer.h"
 #include "console_handler.h"
@@ -91,6 +91,16 @@ extern "C"
 // use boost bind placeholders for now
 #define BOOST_BIND_GLOBAL_PLACEHOLDERS 1
 #include <boost/bind.hpp>
+
+#ifdef WIN32
+#include <boost/locale.hpp>
+#include <boost/filesystem.hpp>
+#include <fcntl.h>
+#endif
+
+#ifdef HAVE_READLINE
+#include "readline_buffer.h"
+#endif
 
 using namespace epee;
 using namespace std;

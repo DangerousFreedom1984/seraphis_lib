@@ -40,24 +40,32 @@ set(seraphis_wallet_sources
     wallet3.cpp)
 
 set(wallet3_sources
+    address_utils.cpp
+    jamtis_keys.cpp
+    key_container.cpp
+    send_receive.cpp
+    serialization_types.cpp
+    show_enotes.cpp
+    sp_knowledge_proofs.cpp
+    transaction_history.cpp
     wallet3.cpp)
 
-monero_find_all_headers(wallet_private_headers "${CMAKE_CURRENT_SOURCE_DIR}")
+monero_find_all_headers(seraphis_wallet_private_headers "${CMAKE_CURRENT_SOURCE_DIR}")
+monero_find_all_headers(wallet3_private_headers "${CMAKE_CURRENT_SOURCE_DIR}")
 
 monero_private_headers(seraphis_wallet
-  ${wallet_private_headers})
-
+  ${seraphis_wallet_private_headers})
 monero_private_headers(wallet3
-  ${wallet_private_headers})
+  ${wallet3_private_headers})
 
 monero_add_library(seraphis_wallet
   ${seraphis_wallet_sources}
   ${seraphis_wallet_private_headers})
 
 monero_add_executable(wallet3
-  ${seraphis_wallet_sources}
-  ${seraphis_wallet_headers}
-  ${seraphis_wallet_private_headers})
+  ${wallet3_sources}
+  ${wallet3_headers}
+  ${wallet3_private_headers})
 
 target_link_libraries(seraphis_wallet
   PUBLIC
@@ -75,18 +83,21 @@ target_link_libraries(seraphis_wallet
     multisig
     net
     wallet2_basic
-    ${LMDB_LIBRARY}
+    ${EPEE_READLINE}
+    qrcodegen
+    version
     ${Boost_CHRONO_LIBRARY}
-    ${Boost_SERIALIZATION_LIBRARY}
+    ${Boost_PROGRAM_OPTIONS_LIBRARY}
     ${Boost_FILESYSTEM_LIBRARY}
-    ${Boost_SYSTEM_LIBRARY}
+    ${Boost_LOCALE_LIBRARY}
+    ${ICU_LIBRARIES}
     ${Boost_THREAD_LIBRARY}
-    ${Boost_REGEX_LIBRARY}
-  PRIVATE
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${GNU_READLINE_LIBRARY}
     ${EXTRA_LIBRARIES})
 
 target_link_libraries(wallet3
-  PUBLIC
+  PRIVATE
     cncrypto
     common
     cryptonote_basic
@@ -101,15 +112,6 @@ target_link_libraries(wallet3
     multisig
     net
     wallet2_basic
-    ${LMDB_LIBRARY}
-    ${Boost_CHRONO_LIBRARY}
-    ${Boost_SERIALIZATION_LIBRARY}
-    ${Boost_FILESYSTEM_LIBRARY}
-    ${Boost_SYSTEM_LIBRARY}
-    ${Boost_THREAD_LIBRARY}
-    ${Boost_REGEX_LIBRARY}
-  PRIVATE
-    ${EXTRA_LIBRARIES}
     ${EPEE_READLINE}
     qrcodegen
     version
@@ -122,7 +124,9 @@ target_link_libraries(wallet3
     ${CMAKE_THREAD_LIBS_INIT}
     ${GNU_READLINE_LIBRARY}
     ${EXTRA_LIBRARIES})
+  
 set_property(TARGET wallet3
   PROPERTY
     OUTPUT_NAME "monero-wallet3")
+
 install(TARGETS wallet3 DESTINATION bin)
