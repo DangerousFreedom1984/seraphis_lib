@@ -52,6 +52,7 @@
 #include "serialization/serialization.h"
 #include "serialization/tuple.h"
 #include "serialization/variant.h"
+#include "serialization/optional.h"
 
 //third party headers
 
@@ -595,7 +596,6 @@ END_SERIALIZE()
 BLOB_SERIALIZER(sp::jamtis::address_index_t);
 BLOB_SERIALIZER(sp::jamtis::address_tag_t);
 BLOB_SERIALIZER(sp::jamtis::encoded_amount_t);
-BLOB_SERIALIZER(boost::optional<cryptonote::subaddress_index>);
 
 VARIANT_TAG(binary_archive, sp::SpCoinbaseEnoteV1, 0x71);
 VARIANT_TAG(binary_archive, sp::SpEnoteV1, 0x72);
